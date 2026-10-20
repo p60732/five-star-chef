@@ -45,7 +45,9 @@
   function cyl(r, h, color, ol, seg) { return toon(new T.CylinderGeometry(r, r, h, seg || 20), color, ol); }
   function sph(r, color, ol) { return toon(new T.SphereGeometry(r, 16, 12), color, ol); }
 
-  var CH = 0.9; // 檯面高度
+  var CH = 0.55; // 檯面高度（壓低，俯視才看得到出入口）
+  var WALL_H = 0.42; // 牆高度（比檯面還矮，只當邊界）
+  var ING_SCALE = 1.75, PLATE_SCALE = 1.3; // 食材、盤子放大，遠看也認得出來
 
   function create(container) {
     var renderer = new T.WebGLRenderer({ antialias: true });
@@ -69,7 +71,7 @@
     });
     hl.visible = false; scene.add(hl);
     function setTarget(cell, floor) {
-      if (cell) { hl.visible = true; hl.position.set(cell[0] + 0.5, cells[cell[1]][cell[0]] === 'T' ? 0.9 : CH + 0.08, cell[1] + 0.5); hl.scale.setScalar(1); }
+      if (cell) { hl.visible = true; hl.position.set(cell[0] + 0.5, CH + 0.09, cell[1] + 0.5); hl.scale.setScalar(1); }
       else if (floor) { hl.visible = true; hl.position.set(floor[0], 0.04, floor[1]); hl.scale.setScalar(0.6); }
       else hl.visible = false;
     }
@@ -95,10 +97,10 @@
         var fl = new T.Mesh(new T.PlaneGeometry(1, 1), mat((x + y) % 2 ? COL.floorA : COL.floorB));
         fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0, cz); world.add(fl);
         if (ch === '.') continue;
-        if (ch === '#') { g = box(1, 1.25, 1, COL.wall, 0.02); g.position.set(cx, 0.625, cz); world.add(g); continue; }
+        if (ch === '#') { g = box(1, WALL_H, 1, COL.wall, 0.02); g.position.set(cx, WALL_H / 2, cz); world.add(g); var cap = box(1, 0.04, 1, COL.wallTop, false); cap.position.set(cx, WALL_H + 0.02, cz); world.add(cap); continue; }
         // 所有工作台先有一個檯面座
         var baseCol = { V: COL.belt, M: COL.mover, W: COL.window, S: COL.stove, T: COL.trash, I: COL.crate, K: COL.counter, O: COL.serve }[ch] || COL.counter;
-        if (ch === 'T') { g = cyl(0.38, 0.85, COL.trash, 0.05); g.position.set(cx, 0.425, cz); world.add(g); continue; }
+        if (ch === 'T') { g = cyl(0.4, CH, COL.trash, 0.05); g.position.set(cx, CH / 2, cz); world.add(g); var lid = cyl(0.3, 0.03, 0x2B3440, false); lid.position.set(cx, CH + 0.02, cz); world.add(lid); continue; }
         g = box(0.98, CH, 0.98, baseCol, 0.03); g.position.set(cx, CH / 2, cz); world.add(g);
         var top = null;
         if (ch === 'C' || ch === 'P' || ch === 'R') { top = box(1, 0.06, 1, COL.counterTop, false); }
@@ -109,7 +111,7 @@
         if (ch === 'I') {
           top = box(0.9, 0.12, 0.9, 0xA67D52, false);
           var item = (state.tiles[x + ',' + y] || {}).item, c = ING[item] ? ING[item].raw : 0xffffff;
-          for (var i = 0; i < 3; i++) { var b = sph(0.14, c, 0.08); b.position.set(-0.22 + i * 0.22, 0.14, (i % 2) * 0.12 - 0.06); top.add(b); }
+          for (var i = 0; i < 3; i++) { var b = sph(0.19, c, 0.07); b.position.set(-0.25 + i * 0.25, 0.18, (i % 2) * 0.14 - 0.07); top.add(b); }
         }
         if (ch === 'V') { top = box(1, 0.05, 0.7, 0x2B4A60, false); }
         if (ch === 'W') { top = box(1, 0.06, 1, 0xD49A52, false); }
@@ -138,6 +140,11 @@
     // ── 東西的模型 ──
     function itemSig(it) { return it.kind === 'plate' ? 'p' + (it.dirty ? 'd' : '') + it.contents.join(',') : it.name + it.state; }
     function makeItem(it) {
+      var g = makeItemRaw(it);
+      g.scale.setScalar(it.kind === 'plate' ? PLATE_SCALE : ING_SCALE);
+      return g;
+    }
+    function makeItemRaw(it) {
       var g = new T.Group();
       if (it.kind === 'plate') {
         var pl = cyl(0.3, 0.05, it.dirty ? COL.dirty : COL.plate, 0.06, 24); g.add(pl);
@@ -172,11 +179,11 @@
       var a = it.at;
       if (a.hand != null) {
         var p = players[a.hand];
-        return [p.x + p.fx * 0.42, 0.68, p.y + p.fy * 0.42];
+        return [p.x + p.fx * 0.5, 0.62, p.y + p.fy * 0.5];
       }
       if (a.tile) { var xy = a.tile.split(','); return [+xy[0] + 0.5, CH + 0.06, +xy[1] + 0.5]; }
       if (a.floor) return [a.floor[0], 0.02, a.floor[1]];
-      if (a.air) { var t = Math.min(1, a.dist / 4); return [a.x, 0.9 + Math.sin(t * Math.PI) * 0.8, a.y]; }
+      if (a.air) { var t = Math.min(1, a.dist / 4); return [a.x, 0.7 + Math.sin(t * Math.PI) * 0.8, a.y]; }
       return [0, -10, 0];
     }
 
@@ -240,14 +247,14 @@
       var target = new T.Vector3(), pos3 = new T.Vector3();
       if (camMode === 'follow' && p0) {
         target.set(p0.x + p0.fx * 0.6, 0, p0.y + p0.fy * 0.6);
-        pos3.set(target.x, 7.5, target.z + 5.2);
+        pos3.set(target.x, 8, target.z + 4.2);
       } else {
         var cx = W / 2, cz = H / 2;
         var vfov = camera.fov * Math.PI / 180, hfov = 2 * Math.atan(Math.tan(vfov / 2) * camera.aspect);
-        var needW = (W + 1) / 2 / Math.tan(hfov / 2), needH = (H + 1.5) / 2 / Math.tan(vfov / 2) * 0.82;
+        var needW = (W + 0.4) / 2 / Math.tan(hfov / 2), needH = (H + 1.5) / 2 / Math.tan(vfov / 2) * 0.82;
         var dist = Math.max(needW, needH, 8);
-        target.set(cx, 0, cz + 0.4);
-        pos3.set(cx, dist * 0.86, cz + dist * 0.52);
+        target.set(cx, 0, cz + 0.2);
+        pos3.set(cx, dist * 0.93, cz + dist * 0.37);
       }
       if (!camInit) { camPos.copy(pos3); camLook.copy(target); camInit = true; }
       camPos.lerp(pos3, 0.12); camLook.lerp(target, 0.12);

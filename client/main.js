@@ -166,19 +166,19 @@
     for (var id in cur.items) {
       var it = cur.items[id];
       if (it.kind === 'ing' && it.state === 'raw' && it.chop > 0 && it.at.tile) {
-        var xy = it.at.tile.split(','); bar('c' + id, +xy[0] + 0.5, 1.5, +xy[1] + 0.5, it.chop, 'chop');
+        var xy = it.at.tile.split(','); bar('c' + id, +xy[0] + 0.5, 1.25, +xy[1] + 0.5, it.chop, 'chop');
       }
     }
     for (var tk in cur.tiles) {
       var t = cur.tiles[tk], a = tk.split(','), x = +a[0] + 0.5, z = +a[1] + 0.5;
-      if (t.wash > 0) bar('w' + tk, x, 1.5, z, t.wash, 'wash');
+      if (t.wash > 0) bar('w' + tk, x, 1.2, z, t.wash, 'wash');
       if (t.pot) {
         var pot = t.pot;
-        if (pot.burnt) bar('p' + tk, x, 1.7, z, 1, 'burnt', '燒焦');
+        if (pot.burnt) bar('p' + tk, x, 1.35, z, 1, 'burnt', '燒焦');
         else if (Game.potComplete(pot)) {
-          if (pot.cook < C.cookSec) bar('p' + tk, x, 1.7, z, pot.cook / C.cookSec, 'cook');
-          else bar('p' + tk, x, 1.7, z, 1 - (pot.cook - C.cookSec) / C.burnSec, (pot.cook - C.cookSec) > C.burnSec * 0.5 ? 'warn' : 'ready', '好了');
-        } else if (pot.contents.length) bar('p' + tk, x, 1.7, z, pot.contents.length / C.soupSize, 'partial', pot.contents.length + '/' + C.soupSize);
+          if (pot.cook < C.cookSec) bar('p' + tk, x, 1.35, z, pot.cook / C.cookSec, 'cook');
+          else bar('p' + tk, x, 1.35, z, 1 - (pot.cook - C.cookSec) / C.burnSec, (pot.cook - C.cookSec) > C.burnSec * 0.5 ? 'warn' : 'ready', '好了');
+        } else if (pot.contents.length) bar('p' + tk, x, 1.35, z, pot.contents.length / C.soupSize, 'partial', pot.contents.length + '/' + C.soupSize);
       }
     }
     for (var k2 in barPool) if (!barPool[k2]._seen) { barPool[k2].remove(); delete barPool[k2]; }
