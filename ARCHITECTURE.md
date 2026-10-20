@@ -11,7 +11,7 @@
 | 一句話目標 | 手機上 1–8 人線上合作的限時料理遊戲：分工備料、烹調、出餐，在時間內完成訂單 |
 | 使用者角色 | 玩家（房主 / 一般玩家）；開發者（佩芝 + Claude） |
 | 使用裝置 | 手機為主（iPhone Safari 優先、Android Chrome），電腦瀏覽器可玩 |
-| 目前階段 | M0 開工準備 |
+| 目前階段 | M0 單機原型（1 人閉環完成） |
 | 前端載體 | Three.js 網頁遊戲，GitHub Pages；上架時用 Capacitor 包成 App |
 | 後端載體 | Colyseus（Node.js 權威伺服器）放雲端主機 |
 | 資料儲存 | 遊戲內容：repo 內 JSON；房間狀態：伺服器記憶體（不落地）；玩家設定：localStorage |

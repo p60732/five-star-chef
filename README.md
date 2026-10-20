@@ -2,7 +2,7 @@
 
 手機上 1–8 人線上合作的限時料理遊戲：分工備料、烹調、出餐，在時間內完成訂單。
 
-- 目前階段：M0 開工準備（關卡設計與關卡編輯器已完成，遊戲本體尚未開始）
+- 目前階段：M0 單機原型（1 人可以玩完整個流程；機關與連線尚未開始）
 - 架構與規則：[ARCHITECTURE.md](ARCHITECTURE.md)
 - 關卡設計：[docs/關卡設計.md](docs/關卡設計.md)
 
@@ -10,6 +10,8 @@
 
 | 路徑 | 內容 |
 |---|---|
+| `shared/rules/game.js` | 規則引擎：移動、拿放、切、煮、裝盤、出餐、洗盤、丟出、訂單（純函式） |
+| `client/` | 畫面（Three.js）、操作、HUD |
 | `shared/level.js` | 關卡依人數展開、關卡檢查、菜單、人數難度（遊戲、伺服器、編輯器共用） |
 | `data/levels.json` | 全部關卡（試玩版 5 關） |
 | `tools/level-editor/` | 關卡編輯器原始碼與建置腳本 |
@@ -19,7 +21,9 @@
 ## 常用指令
 
 ```bash
-npm test                 # 跑關卡測試
+npm test                 # 跑關卡測試 + 規則引擎測試
+npm run build            # 建置單機試玩版 → dist/play.html
+npm run build:pages      # 建置 GitHub Pages 版 → dist/index.html
 npm run build:editor     # 建置關卡編輯器 → tools/level-editor/dist/level-editor.html
 ```
 

@@ -4,7 +4,9 @@
   "private": true,
   "description": "五星大主廚：手機上 1–8 人線上合作的限時料理遊戲",
   "scripts": {
-    "test": "node tests/level.test.js",
+    "test": "node tests/level.test.js && node tests/game.test.js",
+    "build": "node build.js",
+    "build:pages": "node build.js dist/index.html --pages",
     "build:editor": "node tools/level-editor/build.js"
   }
 }
