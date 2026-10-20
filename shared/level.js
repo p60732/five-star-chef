@@ -43,14 +43,14 @@
 
   // 人數難度（第一版預設值，之後試玩再調）
   var DIFFICULTY = {
-    1: { orderEverySec: 22, maxOrders: 3, scoreScale: 0.6 },
-    2: { orderEverySec: 18, maxOrders: 3, scoreScale: 0.8 },
-    3: { orderEverySec: 16, maxOrders: 4, scoreScale: 0.9 },
-    4: { orderEverySec: 14, maxOrders: 4, scoreScale: 1.0 },
-    5: { orderEverySec: 12, maxOrders: 5, scoreScale: 1.15 },
-    6: { orderEverySec: 11, maxOrders: 5, scoreScale: 1.3 },
-    7: { orderEverySec: 10, maxOrders: 6, scoreScale: 1.45 },
-    8: { orderEverySec: 9, maxOrders: 6, scoreScale: 1.6 }
+    1: { orderEverySec: 34, maxOrders: 2, scoreScale: 0.5, patienceScale: 1.6 },
+    2: { orderEverySec: 24, maxOrders: 3, scoreScale: 0.75, patienceScale: 1.3 },
+    3: { orderEverySec: 18, maxOrders: 4, scoreScale: 0.9, patienceScale: 1.15 },
+    4: { orderEverySec: 15, maxOrders: 4, scoreScale: 1.0, patienceScale: 1 },
+    5: { orderEverySec: 13, maxOrders: 5, scoreScale: 1.15, patienceScale: 1 },
+    6: { orderEverySec: 12, maxOrders: 5, scoreScale: 1.3, patienceScale: 1 },
+    7: { orderEverySec: 11, maxOrders: 6, scoreScale: 1.45, patienceScale: 1 },
+    8: { orderEverySec: 10, maxOrders: 6, scoreScale: 1.6, patienceScale: 1 }
   };
 
   var DIRS = { N: [0, -1], E: [1, 0], S: [0, 1], W: [-1, 0] };

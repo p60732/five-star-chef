@@ -10,12 +10,17 @@
 
   // ── 可調數字（第一版預設值，試玩後再調）──
   var CFG = {
-    speed: 4.2,            // 格/秒
-    radius: 0.32,          // 角色碰撞半徑（格）
-    chopSec: 2.0,          // 切一次要按住幾秒
-    washSec: 2.5,          // 洗一個盤子
+    speed: 3.8,            // 格/秒（搖桿推到底）
+    slowSpeed: 0.5,        // 搖桿推一點點時的速度倍率
+    deadzone: 0.25,        // 搖桿中心不反應的範圍
+    fullAt: 0.6,           // 推超過這個比例就是全速
+    radius: 0.3,           // 角色碰撞半徑（格）
+    reach: 1.5,            // 能互動的最遠距離（格中心到角色中心）
+    assist: 0.6,           // 對準容錯：比最佳那格差多少分以內也算
+    chopSec: 1.2,          // 切好要幾秒（按一下就自動切，走開才中斷）
+    washSec: 1.5,          // 洗一個盤子
     cookSec: 8,            // 煮熟
-    burnSec: 10,           // 煮熟後再過幾秒燒焦
+    burnSec: 14,           // 煮熟後再過幾秒燒焦
     soupSize: 3,           // 湯要幾份食材
     plates: 4,             // 開局盤子數
     returnSec: 6,          // 出餐後幾秒髒盤回來
@@ -142,9 +147,75 @@
     pot.contents.push(it.name); removeItem(s, it.id); s.stats.merged++;
   }
 
+  // ── 對準：在身邊（含斜角）找最可能要互動的格子 ──
+  // 分數＝距離 − 面向加權；只看前方與側邊，正後方不算。
+  function candidates(s, p) {
+    var cx = Math.floor(p.x), cy = Math.floor(p.y), fl = Math.hypot(p.fx, p.fy) || 1, out = [];
+    var fc = facingCell(p);
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      var x = cx + dx, y = cy + dy, ch = cellAt(s, x, y);
+      if (ch === '.' || ch === '#' || ch === ' ') continue;
+      var vx = x + 0.5 - p.x, vy = y + 0.5 - p.y, d = Math.hypot(vx, vy);
+      if (d > CFG.reach) continue;
+      var dot = (vx * p.fx + vy * p.fy) / (d * fl);
+      if (dot < -0.3) continue;
+      var score = d * 0.8 - dot * 1.2 - (x === fc[0] && y === fc[1] ? 0.4 : 0);
+      out.push({ x: x, y: y, score: score });
+    }
+    out.sort(function (a, b) { return a.score - b.score; });
+    // 只保留跟最佳那格差不多的（容錯），避免「對著爐子卻放到旁邊檯面」
+    return out.filter(function (c) { return c.score <= out[0].score + CFG.assist; });
+  }
+  function faceTo(p, x, y) {
+    var vx = x + 0.5 - p.x, vy = y + 0.5 - p.y, l = Math.hypot(vx, vy) || 1;
+    p.fx = vx / l; p.fy = vy / l;
+  }
+  // 找第一個「按拿會有反應」的格子；用複本試算，不改真正的狀態
+  function grabTarget(s, p) {
+    var list = candidates(s, p);
+    for (var i = 0; i < list.length; i++) {
+      var dry = clone(s), dp = dry.players[p.id];
+      if (grabAt(dry, dp, [list[i].x, list[i].y])) return [list[i].x, list[i].y];
+    }
+    return null;
+  }
+  function useOk(s, p, c) {
+    var ch = cellAt(s, c[0], c[1]), t = s.tiles[key(c[0], c[1])];
+    if (ch === 'B' && !p.held && t.holds) { var it = s.items[t.holds]; return isIng(it) && it.state === 'raw' && !!CHOPPABLE[it.name]; }
+    if (ch === 'K' && !p.held && t.dirty > 0 && !!s.rack) return true;
+    if (ch === 'S' && t.pot.burnt) return true;
+    return false;
+  }
+  function useTarget(s, p) {
+    var list = candidates(s, p);
+    for (var i = 0; i < list.length; i++) if (useOk(s, p, [list[i].x, list[i].y])) return [list[i].x, list[i].y];
+    return null;
+  }
+
   // ── 拿 / 放 ──
   function grab(s, p) {
-    var fc = facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
+    var c = grabTarget(s, p);
+    if (c) { faceTo(p, c[0], c[1]); return grabAt(s, p, c); }
+    // 手上有東西、身邊又有工作台但都放不了：保留在手上（不要不小心掉在地上）
+    if (p.held && candidates(s, p).length) return null;
+    return grabFloor(s, p);
+  }
+  // 身邊沒有可互動的格子：撿地上的東西，或把手上的東西放在面前的地上
+  function grabFloor(s, p) {
+    var held = p.held ? s.items[p.held] : null;
+    if (!held) {
+      var fl = floorItemNear(s, p);
+      if (fl) { fl.at = { hand: p.id }; p.held = fl.id; return 'pickFloor'; }
+      return null;
+    }
+    var fc = facingCell(p);
+    if (walkable(s, fc[0], fc[1])) { held.at = { floor: [fc[0] + 0.5, fc[1] + 0.5] }; p.held = null; return 'drop'; }
+    if (walkable(s, Math.floor(p.x), Math.floor(p.y))) { held.at = { floor: [p.x, p.y] }; p.held = null; return 'drop'; }
+    return null;
+  }
+  function grabAt(s, p, fc) {
+    var fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
     var held = p.held ? s.items[p.held] : null;
 
     if (!held) {
@@ -155,9 +226,6 @@
       }
       if (ch === 'P' && t.clean > 0) { t.clean--; p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], at: { hand: p.id } }).id; return 'plate'; }
       if (ch === 'R' && t.dirty > 0) { t.dirty--; p.held = newItem(s, { kind: 'plate', dirty: true, contents: [], at: { hand: p.id } }).id; return 'dirty'; }
-      // 地上的東西
-      var fl = floorItemNear(s, p);
-      if (fl) { fl.at = { hand: p.id }; p.held = fl.id; return 'pickFloor'; }
       return null;
     }
 
@@ -192,14 +260,11 @@
     }
     if (ch === 'K' && isPlate(held) && held.dirty) { t.dirty++; removeItem(s, held.id); p.held = null; return 'toSink'; }
     if (ch === 'P' && isPlate(held) && !held.dirty && !held.contents.length) { t.clean++; removeItem(s, held.id); p.held = null; return 'toRack'; }
-    if (walkable(s, fc[0], fc[1])) {             // 放在面前的地上
-      held.at = { floor: [fc[0] + 0.5, fc[1] + 0.5] }; p.held = null; return 'drop';
-    }
     return null;
   }
 
   function floorItemNear(s, p) {
-    var px = p.x + p.fx * 0.6, py = p.y + p.fy * 0.6, best = null, bd = 0.85;
+    var px = p.x + p.fx * 0.4, py = p.y + p.fy * 0.4, best = null, bd = 1.2;
     for (var id in s.items) {
       var it = s.items[id];
       if (!it.at.floor) continue;
@@ -279,38 +344,48 @@
     it.at = { floor: [cx + 0.5, cy + 0.5] };
   }
 
-  // ── 切 / 洗 / 清鍋（按住）──
-  function useHeld(s, p, dt) {
-    var fc = facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
-    if (ch === 'B' && !p.held && t.holds) {
+  // ── 切 / 洗 / 清鍋 ──
+  // 按一下就開始，之後自動進行到完成；移動、拿東西或目標不能做了才中斷。
+  function startUse(s, p) {
+    var c = useTarget(s, p);
+    if (!c) return false;
+    faceTo(p, c[0], c[1]);
+    var ch = cellAt(s, c[0], c[1]);
+    if (ch === 'S') {                                    // 清燒焦的鍋：一下就好
+      s.tiles[key(c[0], c[1])].pot = { contents: [], cook: 0, burnt: false };
+      s.events.push({ t: 'cleared', pid: p.id }); p.busy = null; return true;
+    }
+    p.busy = { kind: ch === 'B' ? 'chop' : 'wash', x: c[0], y: c[1] };
+    return true;
+  }
+  function workBusy(s, p, dt) {
+    var b = p.busy, c = [b.x, b.y], t = s.tiles[key(b.x, b.y)];
+    if (!useOk(s, p, c)) { p.busy = null; return; }
+    if (b.kind === 'chop') {
       var it = s.items[t.holds];
-      if (isIng(it) && it.state === 'raw' && CHOPPABLE[it.name]) {
-        it.chop = Math.min(1, it.chop + dt / CFG.chopSec);
-        p.busy = 'chop';
-        if (it.chop >= 1) { it.state = 'cut'; p.busy = null; s.events.push({ t: 'chopped', pid: p.id }); }
-        return;
+      it.chop = Math.min(1, it.chop + dt / CFG.chopSec);
+      if (it.chop >= 1) { it.state = 'cut'; p.busy = null; s.events.push({ t: 'chopped', pid: p.id }); }
+    } else {
+      t.wash += dt / CFG.washSec;
+      if (t.wash >= 1) {
+        t.wash = 0; t.dirty--; s.tiles[s.rack].clean++; s.events.push({ t: 'washed', pid: p.id });
+        if (t.dirty <= 0) p.busy = null;                  // 有好幾個髒盤就接著洗
       }
     }
-    if (ch === 'K' && !p.held && t.dirty > 0 && s.rack) {
-      t.wash += dt / CFG.washSec; p.busy = 'wash';
-      if (t.wash >= 1) { t.wash = 0; t.dirty--; s.tiles[s.rack].clean++; p.busy = null; s.events.push({ t: 'washed', pid: p.id }); }
-      return;
-    }
-    if (ch === 'S' && t.pot.burnt) {
-      t.pot = { contents: [], cook: 0, burnt: false }; s.events.push({ t: 'cleared', pid: p.id }); p.busy = null; return;
-    }
-    p.busy = null;
   }
 
   // ── 移動 ──
+  // 搖桿：中心一小圈不反應；推一點是慢走、推過 fullAt 就全速。轉向立刻生效。
   function move(s, p, mx, my, dt) {
     var len = Math.hypot(mx, my);
-    if (len > 1) { mx /= len; my /= len; len = 1; }
-    if (len > 0.2) { p.fx = mx / len; p.fy = my / len; }
-    if (len < 0.05) return;
-    var nx = p.x + mx * CFG.speed * dt, ny = p.y + my * CFG.speed * dt;
+    if (len < CFG.deadzone) return false;
+    var ux = mx / len, uy = my / len;
+    p.fx = ux; p.fy = uy;
+    var sp = CFG.speed * (len >= CFG.fullAt ? 1 : CFG.slowSpeed);
+    var nx = p.x + ux * sp * dt, ny = p.y + uy * sp * dt;
     if (!blocked(s, nx, p.y)) p.x = nx;
     if (!blocked(s, p.x, ny)) p.y = ny;
+    return true;
   }
   function blocked(s, x, y) {
     var r = CFG.radius;
@@ -340,7 +415,7 @@
     if (s.nextOrderIn <= 0) {
       if (s.orders.length < s.difficulty.maxOrders && s.dishes.length) {
         var dish = s.dishes[Math.floor(rand(s) * s.dishes.length)];
-        var pat = CFG.patience[dish] || 60;
+        var pat = Math.round((CFG.patience[dish] || 60) * (s.difficulty.patienceScale || 1));
         s.orders.push({ id: s.nextOrderId++, dish: dish, timeLeft: pat, total: pat });
         s.events.push({ t: 'order', dish: dish });
       }
@@ -349,7 +424,7 @@
   }
 
   // ── 一個 tick ──
-  // inputs[pid] = { mx, my, grab: bool（這一刻按下）, throw: bool, use: bool（按住中）}
+  // inputs[pid] = { mx, my, grab: bool（這一刻按下）, throw: bool, use: bool（按著；按一下就會開始自動切／洗）}
   function step(prev, inputs, dt) {
     var s = clone(prev);
     s.events = [];
@@ -358,11 +433,12 @@
 
     s.players.forEach(function (p) {
       var inp = inputs[p.id] || {};
-      var moving = Math.hypot(inp.mx || 0, inp.my || 0) > 0.1;
-      move(s, p, inp.mx || 0, inp.my || 0, dt);
-      if (inp.grab) { var r = grab(s, p); s.events.push({ t: r ? 'grab:' + r : 'nothing', pid: p.id }); }
+      var moved = move(s, p, inp.mx || 0, inp.my || 0, dt);
+      if (moved) p.busy = null;
+      if (inp.grab) { p.busy = null; var r = grab(s, p); s.events.push({ t: r ? 'grab:' + r : 'nothing', pid: p.id }); }
       if (inp['throw']) { var r2 = throwItem(s, p); if (r2) s.events.push({ t: 'throw', pid: p.id }); }
-      if (inp.use && !moving) useHeld(s, p, dt); else p.busy = null;
+      if (inp.use && !moved && !p.busy) startUse(s, p);
+      if (p.busy) workBusy(s, p, dt);
     });
 
     flyItems(s, dt);
@@ -443,9 +519,11 @@
   }
   function describe(s, pid) {
     var p = s.players[pid];
-    var fc = facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
+    var gc = grabTarget(s, p), uc = useTarget(s, p);
+    var fc = gc || uc || facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
     var held = p.held ? s.items[p.held] : null;
-    var out = { holding: itemLabel(held), target: '', grab: '', use: '', canThrow: isIng(held) };
+    var out = { holding: itemLabel(held), target: '', grab: '', use: '', canThrow: isIng(held), cell: gc || uc || null, busy: !!p.busy };
+    if (!gc && !held) { var fl = floorItemNear(s, p); if (fl) out.floor = fl.at.floor; }
     var tn = Level.TILES[ch] ? Level.TILES[ch].name : '';
     out.target = tn;
     if (ch === 'I' && t) out.target = NAMES[t.item] + '箱';
@@ -469,11 +547,14 @@
       toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上' };
     out.grab = r ? GRAB[r] : '';
     if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
-    if (ch === 'B' && !held && t.holds) {
-      var it = s.items[t.holds];
-      if (isIng(it) && it.state === 'raw' && CHOPPABLE[it.name]) out.use = '按住切（' + Math.round(it.chop * 100) + '%）';
+    out.use = '';
+    if (uc) {
+      var uch = cellAt(s, uc[0], uc[1]), ut = s.tiles[key(uc[0], uc[1])];
+      if (uch === 'B') out.use = p.busy ? '切菜中 ' + Math.round(s.items[ut.holds].chop * 100) + '%' : '切';
+      if (uch === 'K') out.use = p.busy ? '洗碗中' : '洗盤子';
+      if (uch === 'S') out.use = '清掉焦鍋';
     }
-    if (ch === 'K' && !held && t.dirty > 0) out.use = '按住洗';
+    if (!out.grab && !out.use && held && ch !== 'O') out.grab = '';
     return out;
   }
 

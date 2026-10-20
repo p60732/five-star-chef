@@ -12,6 +12,7 @@
   try { Object.assign(settings, JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}')); } catch (e) {}
   function saveSettings() { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings)); } catch (e) {} }
 
+  var desc = null;            // 「面前是什麼、按鍵會做什麼」，每個 tick 算一次
   var R = null, cur = null, prev = null, level = null, acc = 0, last = 0, running = false, paused = false;
   var input = { mx: 0, my: 0, grab: false, throw: false, use: false };
   var key = { up: 0, down: 0, left: 0, right: 0 };
@@ -62,6 +63,7 @@
         input.grab = false; input.throw = false;
         prev = cur; cur = Game.step(cur, { 0: inp }, STEP);
         handleEvents(cur.events);
+        desc = null;
         acc -= STEP;
         if (cur.ended) { running = false; setTimeout(showEnd, 600); break; }
       }
@@ -78,7 +80,7 @@
       if (e.t === 'served') { floatAtPlayer(e.pid, '+' + e.points, 'good'); toast(DISH(e.dish) + ' 出餐！'); }
       if (e.t === 'wrong') toast('沒有這道菜的訂單');
       if (e.t === 'expired') toast(DISH(e.dish) + ' 等太久，客人走了 −' + Game.CFG.expirePenalty);
-      if (e.t === 'burnt') toast('鍋子燒焦了！按住「切/互動」清掉');
+      if (e.t === 'burnt') toast('鍋子燒焦了！走到鍋子前按「切/互動」清掉');
       if (e.t === 'order') pulse('orders');
       if (e.t === 'chopped') floatAtPlayer(e.pid, '切好了', '');
       if (e.t === 'washed') floatAtPlayer(e.pid, '洗好了', '');
@@ -131,7 +133,8 @@
     });
 
     // 提示列與按鈕文字
-    var d = Game.describe(cur, 0);
+    var d = desc || (desc = Game.describe(cur, 0));
+    R.setTarget(d.cell, d.floor);
     var parts = [];
     if (d.holding) parts.push('手上：' + d.holding);
     if (d.target) parts.push('面前：' + d.target);

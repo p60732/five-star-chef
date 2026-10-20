@@ -122,6 +122,13 @@ t('丟出：隔兩格把切好的番茄丟進鍋', () => {
   assert.ok(!s.players[0].held);
 });
 
+t('拿著東西、身邊的工作台都放不下時，東西留在手上不會掉', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');                // 生番茄
+  s = at(s, 7, 2, 'N'); s = press(s, 'grab');                // 爐子不收生番茄
+  assert.ok(held(s) && held(s).name === 'tomato');
+});
+
 t('丟出：撞牆掉在地上，可以撿回來', () => {
   let s = newGame('tomato_soup');
   s = at(s, 1, 2, 'N'); s = press(s, 'grab');
@@ -168,7 +175,8 @@ t('錯的菜不能出餐，盤子留在手上', () => {
 
 t('訂單逾時扣分', () => {
   let s = newGame('tomato_soup');
-  s = wait(s, Game.CFG.firstOrderSec + Game.CFG.patience.tomato_soup + 0.2);
+  s = wait(s, Game.CFG.firstOrderSec + 0.1);
+  s = wait(s, s.orders[0].total + 0.2);
   assert.ok(s.stats.failed >= 1);
   assert.strictEqual(s.score, -Game.CFG.expirePenalty * s.stats.failed);
 });
@@ -223,6 +231,78 @@ t('提示：面前是番茄箱時，「拿」會拿番茄', () => {
   let s = newGame('tomato_soup'); s = at(s, 1, 2, 'N');
   const d = Game.describe(s, 0);
   assert.strictEqual(d.target, '番茄箱'); assert.strictEqual(d.grab, '拿番茄');
+});
+
+t('切菜：按一下就自動切完，不用一直按', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 4, 2, 'N'); s = press(s, 'grab');
+  s = press(s, 'use');
+  s = wait(s, Game.CFG.chopSec + 0.1);
+  assert.strictEqual(s.items[s.tiles['4,1'].holds].state, 'cut');
+});
+
+t('切菜：走開會中斷，回來繼續切，進度保留', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 4, 2, 'N'); s = press(s, 'grab');
+  s = press(s, 'use'); s = wait(s, Game.CFG.chopSec / 2);
+  s = go(s, { mx: 0, my: 1 }, 4);
+  const it = s.items[s.tiles['4,1'].holds];
+  assert.ok(it.chop > 0.2 && it.chop < 1, '進度應該停在一半，實際 ' + it.chop);
+  assert.ok(!s.players[0].busy, '走開就不再切');
+  const before = it.chop;
+  s = at(s, 4, 2, 'N'); s = press(s, 'use'); s = wait(s, Game.CFG.chopSec * (1 - before) + 0.1);
+  assert.strictEqual(s.items[s.tiles['4,1'].holds].state, 'cut');
+});
+
+t('洗碗：按一下會把水槽裡的盤子一個接一個洗完', () => {
+  let s = newGame('tomato_soup');
+  s.tiles['9,3'].dirty = 2; s.tiles['1,7'].clean -= 2;      // 測試用：兩個髒盤放進水槽
+  s = at(s, 8, 3, 'E'); s = press(s, 'use');
+  s = wait(s, Game.CFG.washSec * 2 + 0.2);
+  assert.strictEqual(s.tiles['9,3'].dirty, 0); assert.strictEqual(s.tiles['1,7'].clean, Game.CFG.plates);
+});
+
+t('對準：沒有正對著也能拿到斜前方的生菜箱', () => {
+  let s = newGame('salad');
+  s = at(s, 3, 2, 'N'); s.players[0].fx = -0.6; s.players[0].fy = -0.8;   // 面向左上，正前方是空檯面
+  s = press(s, 'grab');
+  assert.ok(held(s) && held(s).name === 'lettuce', '應該拿到 (2,1) 的生菜');
+});
+
+t('對準：正前方有反應的格子優先', () => {
+  let s = newGame('salad');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  assert.strictEqual(held(s).name, 'tomato');
+});
+
+t('對準：拿著東西時，跳過放不下的格子，放到旁邊空的檯面', () => {
+  let s = newGame('salad');
+  s = at(s, 2, 2, 'N'); s = press(s, 'grab');                // 拿生菜
+  s = at(s, 3, 2, 'N'); s.players[0].fx = -0.4; s.players[0].fy = -0.9;  // 偏向生菜箱，但箱子放不了東西
+  s = press(s, 'grab');
+  assert.ok(s.tiles['3,1'].holds, '應該放在 (3,1) 檯面上');
+});
+
+t('搖桿：中心一小圈不會動；推一點是慢走', () => {
+  let s = newGame('salad'); s = at(s, 5, 4, 'N');
+  const x0 = s.players[0].x;
+  s = go(s, { mx: Game.CFG.deadzone * 0.8, my: 0 }, 10);
+  assert.strictEqual(s.players[0].x, x0, '死區內不能動');
+  s = go(s, { mx: 0.4, my: 0 }, 10);
+  const slow = s.players[0].x - x0;
+  s = at(s, 5, 4, 'N'); const x1 = s.players[0].x;
+  s = go(s, { mx: 1, my: 0 }, 10);
+  assert.ok(slow > 0 && slow < (s.players[0].x - x1) * 0.7, '慢走應該明顯比全速慢');
+});
+
+t('1 人：訂單間隔比較長、同時最多 2 張、客人比較有耐心', () => {
+  const s1 = Game.createGame(L11, 1, 1), s4 = Game.createGame(L11, 4, 1);
+  assert.ok(s1.difficulty.orderEverySec >= 30); assert.strictEqual(s1.difficulty.maxOrders, 2);
+  let a = s1, b = s4;
+  for (let i = 0; i < 60; i++) { a = Game.step(a, {}, DT); b = Game.step(b, {}, DT); }
+  assert.ok(a.orders[0].total > b.orders[0].total, '1 人的耐心應該比 4 人長');
 });
 
 // 突變：守恆檢查真的會抓到錯

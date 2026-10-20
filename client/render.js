@@ -61,6 +61,18 @@
     var W = 10, H = 10, cells = [];
     var playerMeshes = [], itemMeshes = {}, tileDyn = {};
     var camPos = new T.Vector3(), camLook = new T.Vector3(), camInit = false;
+    // 目標格子的黃框（按鍵會作用在這一格）
+    var hl = new T.Group();
+    var hlMat = new T.MeshBasicMaterial({ color: 0xFFD54A, transparent: true, opacity: 0.9, depthTest: false });
+    [[0, -0.47, 1, 0.08], [0, 0.47, 1, 0.08], [-0.47, 0, 0.08, 1], [0.47, 0, 0.08, 1]].forEach(function (e) {
+      var m = new T.Mesh(new T.PlaneGeometry(e[2], e[3]), hlMat); m.rotation.x = -Math.PI / 2; m.position.set(e[0], 0, e[1]); m.renderOrder = 10; hl.add(m);
+    });
+    hl.visible = false; scene.add(hl);
+    function setTarget(cell, floor) {
+      if (cell) { hl.visible = true; hl.position.set(cell[0] + 0.5, cells[cell[1]][cell[0]] === 'T' ? 0.9 : CH + 0.08, cell[1] + 0.5); hl.scale.setScalar(1); }
+      else if (floor) { hl.visible = true; hl.position.set(floor[0], 0.04, floor[1]); hl.scale.setScalar(0.6); }
+      else hl.visible = false;
+    }
 
     function resize() {
       var w = container.clientWidth || 1, h = container.clientHeight || 1;
@@ -240,6 +252,7 @@
       if (!camInit) { camPos.copy(pos3); camLook.copy(target); camInit = true; }
       camPos.lerp(pos3, 0.12); camLook.lerp(target, 0.12);
       camera.position.copy(camPos); camera.lookAt(camLook);
+      hlMat.opacity = 0.6 + Math.sin(performance.now() / 160) * 0.3;
       renderer.render(scene, camera);
       return players;
     }
@@ -252,7 +265,7 @@
     }
 
     resize();
-    return { build: build, draw: draw, project: project, resize: resize, CH: CH, PLAYER: PLAYER };
+    return { build: build, draw: draw, project: project, resize: resize, setTarget: setTarget, CH: CH, PLAYER: PLAYER };
   }
 
   root.Render = { create: create };

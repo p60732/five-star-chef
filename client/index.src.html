@@ -137,10 +137,10 @@ button:focus-visible { outline: 3px solid var(--mustard); outline-offset: 2px }
     </div>
     <div class="card how">
       <h2>怎麼玩</h2>
-      <div><b>左下</b>按住拖曳移動。<b>拿/放</b>：拿食材、放下、裝盤、出餐。<b>切/互動</b>：按住切菜、洗盤、清燒焦的鍋。<b>丟</b>：把手上的食材往前丟（最遠 4 格，可以丟進鍋子）。</div>
+      <div><b>左下</b>按住拖曳移動。<b>拿/放</b>：拿食材、放下、裝盤、出餐。<b>切/互動</b>：按一下就會自動切菜、洗盤（走開會暫停），也能清燒焦的鍋。地上的<b>黃框</b>就是按鍵會作用的那一格。<b>丟</b>：把手上的食材往前丟（最遠 4 格，可以丟進鍋子）。</div>
       <div>流程：食材 → 砧板切 → 湯要 3 份下鍋 → 煮好用盤子盛 → 出餐口 → 髒盤回到回收口 → 水槽洗 → 回到盤架。</div>
     </div>
-    <div class="keys">電腦：WASD／方向鍵移動、J 或空白鍵＝拿/放、按住 K＝切、L＝丟、C＝換鏡頭</div>
+    <div class="keys">電腦：WASD／方向鍵移動、J 或空白鍵＝拿/放、K＝切/互動、L＝丟、C＝換鏡頭</div>
   </div>
 </section>
 
@@ -171,7 +171,7 @@ button:focus-visible { outline: 3px solid var(--mustard); outline-offset: 2px }
     <div class="controls">
       <div class="btns">
         <button class="act" id="btnThrow" aria-label="丟出手上的食材"><b>丟</b></button>
-        <button class="act" id="btnUse" aria-label="切或互動（按住）"><b>切/互動</b><small id="uSub">—</small></button>
+        <button class="act" id="btnUse" aria-label="切或互動"><b>切/互動</b><small id="uSub">—</small></button>
         <button class="act" id="btnGrab" aria-label="拿或放"><b>拿/放</b><small id="gSub">—</small></button>
       </div>
     </div>
