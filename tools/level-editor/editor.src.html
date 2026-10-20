@@ -1,0 +1,588 @@
+<title>五星大主廚關卡編輯器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Baloo+2:wght@600;800&display=swap">
+<style>
+/* 版面：手機單欄由上而下（關卡 → 人數 → 格子 → 工具 → 設定 → 檢查 → 匯出），寬螢幕時格子在左、面板在右 */
+:root {
+  --bg: #EEF1EF; --surface: #FFFFFF; --ink: #1C2A3A; --muted: #56616E; --line: #CBD3D0;
+  --accent: #C8432C; --accent-ink: #FFFFFF; --gold: #F2B544; --ok: #2F7D52; --warn: #8A5A00; --err: #B0301C;
+  --err-bg: #FBE7E3; --warn-bg: #FCF1D9; --ok-bg: #E2F2E8;
+  --t-floor: #E6DAC3; --t-grout: #D3C4A8; --t-wall: #5E4632; --t-void: #A9B8C4; --t-counter: #B98A5E;
+  --t-crate: #8F6A43; --t-board: #E9D7B4; --t-stove: #48525F; --t-sink: #8DB5D6; --t-plate: #F7F3EA;
+  --t-return: #9C8E7A; --t-serve: #F2B544; --t-trash: #6B7684; --t-belt: #3D6E8F; --t-mover: #3F8F7A; --t-window: #B9772E;
+  --display: 'Baloo 2', 'Noto Sans TC', system-ui, sans-serif;
+  --body: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121921; --surface: #1C2631; --ink: #EDF1F4; --muted: #A3AFBC; --line: #33414F;
+  --accent: #E0614A; --accent-ink: #1A0D09; --ok: #7BD3A0; --warn: #F2C46B; --err: #FF9C8A;
+  --err-bg: #3A1F1B; --warn-bg: #362B14; --ok-bg: #173126; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121921; --surface: #1C2631; --ink: #EDF1F4; --muted: #A3AFBC; --line: #33414F;
+  --accent: #E0614A; --accent-ink: #1A0D09; --ok: #7BD3A0; --warn: #F2C46B; --err: #FF9C8A;
+  --err-bg: #3A1F1B; --warn-bg: #362B14; --ok-bg: #173126; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px }
+.app { max-width: 1120px; margin: 0 auto; display: grid; gap: 16px }
+@media (min-width: 900px) { .app { grid-template-columns: minmax(0, 1fr) 380px; align-items: start } .side { grid-row: span 3 } }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px }
+h1 { font-family: var(--display); font-size: 24px; font-weight: 800; margin: 0; letter-spacing: .5px; text-wrap: balance }
+h2 { font-size: 15px; font-weight: 900; margin: 0 0 8px }
+.grow { flex: 1 }
+select, input[type=text], input[type=number], textarea {
+  font: inherit; color: var(--ink); background: var(--surface); border: 2px solid var(--line); border-radius: 10px; min-height: 44px; padding: 6px 10px }
+textarea { width: 100%; min-height: 120px; font-family: ui-monospace, Menlo, monospace; font-size: 12px }
+button { font: inherit; font-weight: 700; color: var(--ink); background: var(--surface); border: 2px solid var(--line); border-radius: 10px; min-height: 44px; padding: 0 14px; cursor: pointer }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px }
+button:disabled { opacity: .45; cursor: default }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 10px; min-width: 0 }
+.side { display: grid; gap: 16px; min-width: 0 }
+
+.players { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.players button { min-width: 44px; padding: 0; font-family: var(--display); font-size: 18px; font-variant-numeric: tabular-nums }
+.players button[aria-pressed=true] { background: var(--ink); color: var(--bg); border-color: var(--ink) }
+.seg { display: inline-flex; border: 2px solid var(--line); border-radius: 10px; overflow: hidden }
+.seg button { border: 0; border-radius: 0; min-height: 40px }
+.seg button[aria-pressed=true] { background: var(--ink); color: var(--bg) }
+.facts { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums }
+
+.board-wrap { overflow-x: auto; padding-bottom: 4px }
+.board { display: grid; gap: 1px; background: var(--t-grout); border: 4px solid var(--t-wall); border-radius: 10px; width: max-content; touch-action: none; user-select: none; -webkit-user-select: none }
+.cell { width: var(--cs); height: var(--cs); position: relative; display: flex; align-items: center; justify-content: center;
+  font-size: calc(var(--cs) * .42); font-weight: 900; line-height: 1; color: #1C2A3A }
+.cell.sel { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 2 }
+.cell .tag { position: absolute; right: 1px; bottom: 0; font-size: calc(var(--cs) * .3); font-weight: 900; background: #1C2A3A; color: #FFF; border-radius: 3px; padding: 0 2px; line-height: 1.15 }
+.cell .spawn { position: absolute; inset: 15%; border-radius: 50%; background: var(--sp); border: 2px solid #1C2A3A; color: #FFF; display: flex; align-items: center; justify-content: center; font-family: var(--display); font-size: calc(var(--cs) * .4) }
+.cell.ghost { opacity: .4 }
+.cell.door { background-image: repeating-linear-gradient(45deg, transparent 0 4px, rgba(28,42,58,.25) 4px 6px) !important }
+.zone-label { position: absolute; left: 2px; top: 1px; font-size: 10px; font-weight: 900; color: #5E4632; white-space: nowrap; pointer-events: none; z-index: 3 }
+
+.tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 6px }
+.tools button { display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 13px; justify-content: flex-start }
+.tools button[aria-pressed=true] { border-color: var(--accent); box-shadow: inset 0 0 0 2px var(--accent) }
+.sw { width: 18px; height: 18px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,.25) }
+.opts { display: flex; flex-wrap: wrap; gap: 10px; align-items: end }
+.opts label, .field label { display: grid; gap: 2px; font-size: 13px; font-weight: 700; color: var(--muted) }
+.opts select, .opts input { min-width: 0 }
+.opts input[type=number] { width: 84px }
+.hint { font-size: 13px; color: var(--muted) }
+.fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px }
+.fields .wide { grid-column: 1 / -1 }
+.field input, .field select, .field textarea { width: 100% }
+.stars { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px }
+.dishes { display: flex; flex-wrap: wrap; gap: 6px }
+.dishes label { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 10px; border: 2px solid var(--line); border-radius: 10px; font-size: 14px; color: var(--ink); font-weight: 500 }
+.dishes input { width: 18px; height: 18px }
+
+.status { display: flex; align-items: center; gap: 8px; font-weight: 900 }
+.pill { font-size: 12px; font-weight: 900; padding: 2px 10px; border-radius: 999px }
+.pill.err { background: var(--err-bg); color: var(--err) } .pill.warn { background: var(--warn-bg); color: var(--warn) } .pill.ok { background: var(--ok-bg); color: var(--ok) }
+.msgs { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 260px; overflow: auto; font-size: 13px }
+.msgs li { padding: 6px 10px; border-radius: 8px }
+.msgs li.err { background: var(--err-bg); color: var(--err) } .msgs li.warn { background: var(--warn-bg); color: var(--warn) }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 700; z-index: 20; max-width: calc(100% - 32px) }
+.confirm { border: 2px solid var(--err); background: var(--err-bg); color: var(--err); border-radius: 10px; padding: 10px; display: grid; gap: 8px; font-size: 14px }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted) }
+.legend span { display: inline-flex; align-items: center; gap: 4px }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important } }
+</style>
+
+<div class="app">
+  <div class="main" style="display:grid; gap:16px; min-width:0">
+    <header>
+      <h1>關卡編輯器</h1>
+      <div class="grow"></div>
+      <label for="levelSel" class="hint" style="font-weight:700">關卡</label>
+      <select id="levelSel"></select>
+      <button id="newBtn" type="button">新關卡</button>
+      <button id="undoBtn" type="button" aria-label="復原上一步">復原</button>
+    </header>
+
+    <section class="panel" aria-label="人數">
+      <div class="row">
+        <div class="seg" role="group" aria-label="顯示方式">
+          <button type="button" id="modeEdit" aria-pressed="true">編輯</button>
+          <button type="button" id="modePreview" aria-pressed="false">實際樣子</button>
+        </div>
+        <div class="players" id="players" role="group" aria-label="預覽人數"></div>
+      </div>
+      <div class="facts" id="facts"></div>
+    </section>
+
+    <section class="panel" aria-label="地圖">
+      <div class="board-wrap"><div class="board" id="board" role="grid" aria-label="關卡地圖"></div></div>
+      <div class="legend">
+        <span><b style="background:#1C2A3A;color:#FFF;border-radius:3px;padding:0 3px">5+</b> 5 人以上才出現</span>
+        <span><b style="background:#1C2A3A;color:#FFF;border-radius:3px;padding:0 3px">門1</b> 1 人時變地板</span>
+        <span>圓圈數字＝出生點順序（人數越多開越多個）</span>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="工具">
+      <h2>畫筆</h2>
+      <div class="tools" id="tools"></div>
+      <div class="opts" id="opts"></div>
+      <div class="hint" id="toolHint"></div>
+    </section>
+  </div>
+
+  <div class="side">
+    <section class="panel" aria-label="檢查">
+      <div class="status" id="status"></div>
+      <ul class="msgs" id="msgs"></ul>
+    </section>
+
+    <section class="panel" aria-label="關卡設定">
+      <h2>關卡設定</h2>
+      <div class="fields">
+        <div class="field"><label for="fId">編號</label><input id="fId" type="text" maxlength="8"></div>
+        <div class="field"><label for="fName">名稱</label><input id="fName" type="text" maxlength="16"></div>
+        <div class="field"><label for="fTime">時間（秒）</label><input id="fTime" type="number" min="60" max="600" step="10"></div>
+        <div class="field"><label for="fW">寬 × 高</label>
+          <div class="row" style="gap:4px; flex-wrap:nowrap"><input id="fW" type="number" min="7" max="20" style="width:64px"> × <input id="fH" type="number" min="7" max="20" style="width:64px"></div></div>
+        <div class="field wide"><label>菜單</label><div class="dishes" id="dishes"></div></div>
+        <div class="field wide"><label>三顆星分數（以 4 人為準）</label>
+          <div class="stars"><input id="fS1" type="number" min="0" step="10" aria-label="一星"><input id="fS2" type="number" min="0" step="10" aria-label="二星"><input id="fS3" type="number" min="0" step="10" aria-label="三星"></div></div>
+        <div class="field wide"><label for="fNote">設計說明</label><textarea id="fNote" style="min-height:64px; font-family:var(--body); font-size:14px"></textarea></div>
+      </div>
+    </section>
+
+    <section class="panel" aria-label="匯出與匯入">
+      <h2>匯出 / 匯入</h2>
+      <div class="hint">草稿只存在這個瀏覽器。改好後複製 JSON，貼進 repo 的 data/levels.json 才算正式。</div>
+      <div class="row">
+        <button type="button" id="expOne">這一關 JSON</button>
+        <button type="button" id="expAll">全部關卡 JSON</button>
+        <button type="button" id="copyBtn" class="primary">複製</button>
+      </div>
+      <label for="io" class="hint" style="font-weight:700">JSON（也可以貼上後按「讀入」）</label>
+      <textarea id="io" spellcheck="false"></textarea>
+      <div class="row">
+        <button type="button" id="impBtn">讀入貼上的 JSON</button>
+        <button type="button" id="dupBtn">複製成新關卡</button>
+        <button type="button" id="delBtn">刪除這一關</button>
+        <button type="button" id="resetBtn">還原內建 5 關</button>
+      </div>
+      <div id="confirmBox"></div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/*LEVEL_JS*/
+</script>
+<script>
+var BUILTIN = /*LEVELS_JSON*/;
+(function () {
+  'use strict';
+  var L = window.Level;
+  var STORE = 'coopk.editor.drafts';
+  var PLAYER_COLORS = ['#C8432C', '#3B82C4', '#3FA36B', '#D9952B', '#9B6BD1', '#E77FA6', '#E8873A', '#2E9C9C'];
+  var TILE_STYLE = {
+    '.': ['--t-floor', ''], '#': ['--t-wall', ''], ' ': ['--t-void', ''], 'C': ['--t-counter', ''],
+    'I': ['--t-crate', '箱'], 'B': ['--t-board', '砧'], 'S': ['--t-stove', '爐'], 'K': ['--t-sink', '水'],
+    'P': ['--t-plate', '盤'], 'R': ['--t-return', '回'], 'O': ['--t-serve', '出'], 'T': ['--t-trash', '垃'],
+    'V': ['--t-belt', ''], 'M': ['--t-mover', '動'], 'W': ['--t-window', '窗']
+  };
+  var LIGHT_TEXT = { '#': 1, 'I': 1, 'S': 1, 'T': 1, 'V': 1, 'M': 1, 'W': 1 };
+  var ARROW = { N: '↑', E: '→', S: '↓', W: '←' };
+  var ING_SHORT = { tomato: '番', lettuce: '生', onion: '洋', mushroom: '蘑', noodle: '麵' };
+  var TOOLS = [
+    { id: '.', name: '地板' }, { id: '#', name: '牆' }, { id: ' ', name: '空地' }, { id: 'C', name: '檯面' },
+    { id: 'I', name: '食材箱' }, { id: 'B', name: '砧板' }, { id: 'S', name: '爐' }, { id: 'K', name: '水槽' },
+    { id: 'P', name: '盤架' }, { id: 'R', name: '回收口' }, { id: 'O', name: '出餐口' }, { id: 'T', name: '垃圾桶' },
+    { id: 'V', name: '輸送帶' }, { id: 'M', name: '移動檯面' }, { id: 'W', name: '定時窗口' },
+    { id: 'spawn', name: '出生點' }, { id: 'pick', name: '選取' }
+  ];
+  var HINTS = {
+    '.': '地板：角色走的地方。也可以拿來擦掉東西。',
+    '#': '牆：擋人也擋丟出的東西。可以設定「人少時變地板」當成門。',
+    ' ': '空地：不能走，但可以隔著丟東西（最遠 4 格）。移動檯面要走在空地上。',
+    'C': '檯面：放東西用。兩區中間的檯面就是傳菜口。',
+    'I': '食材箱：先在下面選食材再點。', 'B': '砧板：切食材。', 'S': '爐：附一個鍋。', 'K': '水槽：洗髒盤。',
+    'P': '盤架：乾淨盤子從這裡拿。', 'R': '髒盤回收口：出餐後盤子從這裡回來。', 'O': '出餐口：把裝好的菜放上去就出餐。',
+    'T': '垃圾桶：丟掉食材或燒焦的東西。',
+    'V': '輸送帶：放上去的東西會往箭頭方向走。拖曳可以畫一整條。',
+    'M': '移動檯面：點起點，往設定方向在空地上來回移動。',
+    'W': '定時窗口：輪流開關的檯面，關的時候拿不到。',
+    spawn: '出生點：依編號順序分配給玩家（第 1 人站 1 號）。點地板放下，會自動跳到下一號。',
+    pick: '選取：點一格看它的設定，可以在下面改。'
+  };
+
+  var levels, cur = 0, tool = 'C', mode = 'edit', n = 4, sel = null, painting = false, undo = [], spawnNo = 1;
+  var opt = { item: 'tomato', dir: 'E', len: 2, open: 10, closed: 10, offset: 0, min: 0, upTo: 0 };
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function lv() { return levels[cur]; }
+  function key(x, y) { return x + ',' + y; }
+  function $(id) { return document.getElementById(id); }
+  function el(tag, attrs, text) {
+    var e = document.createElement(tag);
+    for (var k in attrs || {}) { if (k === 'style') e.style.cssText = attrs[k]; else e.setAttribute(k, attrs[k]); }
+    if (text != null) e.textContent = text;
+    return e;
+  }
+  function toast(msg) {
+    var t = $('toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.hidden = true; }, 2200);
+  }
+  function save() { try { localStorage.setItem(STORE, JSON.stringify({ levels: levels, cur: cur })); } catch (e) {} }
+  function load() {
+    try {
+      var d = JSON.parse(localStorage.getItem(STORE) || 'null');
+      if (d && Array.isArray(d.levels) && d.levels.length) { levels = d.levels; cur = Math.min(d.cur || 0, levels.length - 1); return; }
+    } catch (e) {}
+    levels = clone(BUILTIN); cur = 0;
+  }
+  function snapshot() { undo.push(JSON.stringify(levels)); if (undo.length > 60) undo.shift(); $('undoBtn').disabled = false; }
+  function changed() { save(); renderBoard(); renderChecks(); renderFacts(); }
+
+  // ── 格子 ──
+  function setCell(x, y, ch) {
+    var g = lv().grid, row = g[y];
+    g[y] = row.slice(0, x) + ch + row.slice(x + 1);
+  }
+  function paint(x, y) {
+    var l = lv(), props = l.props = l.props || {}, k = key(x, y);
+    if (tool === 'pick') { sel = [x, y]; renderBoard(); renderOpts(); return; }
+    if (tool === 'spawn') {
+      if (l.grid[y][x] !== '.') { toast('出生點要放在地板上'); return; }
+      l.spawns = l.spawns || [];
+      var dup = l.spawns.findIndex(function (s) { return s[0] === x && s[1] === y; });
+      if (dup >= 0 && dup !== spawnNo - 1) l.spawns.splice(dup, 1);
+      while (l.spawns.length < spawnNo - 1) l.spawns.push([x, y]);
+      l.spawns[spawnNo - 1] = [x, y];
+      spawnNo = spawnNo % 8 + 1; renderOpts(); changed(); return;
+    }
+    var p = {};
+    if (tool === 'I') p.item = opt.item;
+    if (tool === 'V') p.dir = opt.dir;
+    if (tool === 'M') { p.dir = opt.dir; p.len = opt.len; }
+    if (tool === 'W') { p.open = opt.open; p.closed = opt.closed; p.offset = opt.offset; }
+    if (L.TILES[tool].station && opt.min) p.min = opt.min;
+    if ((tool === '#' || tool === ' ' || tool === 'V') && opt.upTo) p.upTo = opt.upTo;
+    var before = l.grid[y][x] + JSON.stringify(props[k] || {});
+    setCell(x, y, tool);
+    if (Object.keys(p).length) props[k] = p; else delete props[k];
+    if (before !== tool + JSON.stringify(props[k] || {})) changed();
+  }
+  function cellAt(ev) {
+    var t = document.elementFromPoint(ev.clientX, ev.clientY);
+    while (t && !(t.dataset && t.dataset.x != null)) t = t.parentElement;
+    return t ? [+t.dataset.x, +t.dataset.y] : null;
+  }
+  var lastCell = '';
+  function onDown(ev) {
+    if (mode !== 'edit') { toast('切回「編輯」才能畫'); return; }
+    var c = cellAt(ev); if (!c) return;
+    ev.preventDefault(); snapshot(); painting = tool !== 'pick' && tool !== 'spawn' && tool !== 'M';
+    lastCell = key(c[0], c[1]); paint(c[0], c[1]);
+  }
+  function onMove(ev) {
+    if (!painting) return;
+    var c = cellAt(ev); if (!c) return;
+    var k = key(c[0], c[1]); if (k === lastCell) return;
+    lastCell = k; paint(c[0], c[1]);
+  }
+
+  function renderBoard() {
+    var l = lv(), b = $('board');
+    var view = mode === 'preview' ? L.resolve(l, n) : null;
+    var w = l.grid[0].length, h = l.grid.length;
+    var avail = Math.min(b.parentElement.clientWidth || 360, 720) - 10;
+    var cs = Math.max(20, Math.min(40, Math.floor((avail - (w - 1)) / w)));
+    b.style.setProperty('--cs', cs + 'px');
+    b.style.gridTemplateColumns = 'repeat(' + w + ', ' + cs + 'px)';
+    b.textContent = '';
+    var spawnAt = {};
+    (view ? view.spawns : (l.spawns || [])).forEach(function (s, i) { spawnAt[key(s[0], s[1])] = i; });
+    for (var y = 0; y < h; y++) for (var x = 0; x < w; x++) {
+      var raw = l.grid[y][x], ch = view ? view.cells[y][x] : raw, p = (l.props || {})[key(x, y)] || {};
+      var st = TILE_STYLE[ch] || TILE_STYLE['#'];
+      var c = el('div', { 'data-x': x, 'data-y': y, role: 'gridcell', class: 'cell' });
+      c.style.background = 'var(' + st[0] + ')';
+      if (LIGHT_TEXT[ch]) c.style.color = '#FFFFFF';
+      if (ch === ' ') c.style.backgroundImage = 'repeating-linear-gradient(-45deg, transparent 0 5px, rgba(255,255,255,.35) 5px 7px)';
+      var label = st[1];
+      if (ch === 'I' && p.item) label = ING_SHORT[p.item] || '?';
+      if (ch === 'V' || ch === 'M') label = (ch === 'M' ? '動' : '') + (ARROW[p.dir] || '?');
+      if (label) c.appendChild(document.createTextNode(label));
+      var tag = '';
+      if (!view) {
+        if (p.min) tag = p.min + '+';
+        if (p.upTo) tag = '門' + p.upTo;
+        if (ch === 'M' && p.len) tag = '×' + p.len;
+        if (ch === 'W') tag = (p.open || '?') + '/' + (p.closed || '?');
+      } else {
+        if (raw !== ch && ch === '.') c.classList.add('door');
+        if (raw !== ch && ch === 'C') c.classList.add('ghost');
+      }
+      if (tag) c.appendChild(el('span', { class: 'tag' }, tag));
+      var si = spawnAt[key(x, y)];
+      if (si != null) {
+        var s = el('span', { class: 'spawn', style: '--sp:' + PLAYER_COLORS[si] }, String(si + 1));
+        c.appendChild(s);
+      }
+      if (sel && sel[0] === x && sel[1] === y) c.classList.add('sel');
+      c.setAttribute('aria-label', '(' + x + ',' + y + ') ' + (L.TILES[ch] ? L.TILES[ch].name : ch) + (si != null ? '，出生點 ' + (si + 1) : ''));
+      b.appendChild(c);
+    }
+    (l.zones || []).forEach(function (z) {
+      var cell = b.children[z.y * w + z.x];
+      if (cell) cell.appendChild(el('span', { class: 'zone-label' }, z.name));
+    });
+  }
+
+  // ── 工具列與選項 ──
+  function renderTools() {
+    var t = $('tools'); t.textContent = '';
+    TOOLS.forEach(function (tl) {
+      var bt = el('button', { type: 'button', 'aria-pressed': String(tool === tl.id) });
+      var sw = el('span', { class: 'sw' });
+      if (TILE_STYLE[tl.id]) sw.style.background = 'var(' + TILE_STYLE[tl.id][0] + ')';
+      else if (tl.id === 'spawn') { sw.style.background = PLAYER_COLORS[0]; sw.style.borderRadius = '50%'; }
+      else { sw.style.background = 'transparent'; sw.style.border = '2px dashed var(--muted)'; }
+      bt.appendChild(sw); bt.appendChild(document.createTextNode(tl.name));
+      bt.addEventListener('click', function () { tool = tl.id; if (tool !== 'pick') sel = null; renderTools(); renderOpts(); renderBoard(); });
+      t.appendChild(bt);
+    });
+    $('toolHint').textContent = HINTS[tool] || '';
+  }
+  function selectEl(id, label, options, value, onChange) {
+    var lab = el('label', { for: id }, label), s = el('select', { id: id });
+    options.forEach(function (o) { var op = el('option', { value: o[0] }, o[1]); if (String(o[0]) === String(value)) op.selected = true; s.appendChild(op); });
+    s.addEventListener('change', function () { onChange(s.value); });
+    lab.appendChild(s); return lab;
+  }
+  function numEl(id, label, value, min, max, onChange) {
+    var lab = el('label', { for: id }, label), i = el('input', { id: id, type: 'number', min: min, max: max, value: value });
+    i.addEventListener('change', function () { var v = Math.max(min, Math.min(max, parseInt(i.value, 10) || min)); i.value = v; onChange(v); });
+    lab.appendChild(i); return lab;
+  }
+  var ING_OPTS = Object.keys(L.INGREDIENTS).map(function (k) { return [k, L.INGREDIENTS[k].name]; });
+  var DIR_OPTS = [['N', '↑ 上'], ['E', '→ 右'], ['S', '↓ 下'], ['W', '← 左']];
+  var MIN_OPTS = [[0, '全部人數'], [3, '3 人以上'], [5, '5 人以上'], [7, '7 人以上']];
+  var UPTO_OPTS = [[0, '不變'], [1, '1 人時變地板'], [2, '2 人以下變地板'], [3, '3 人以下變地板']];
+
+  // 同一套欄位：畫筆用（改 opt），選取用（直接改那一格）
+  function fieldsFor(ch, src, set, prefix) {
+    var box = [];
+    if (ch === 'I') box.push(selectEl(prefix + 'item', '食材', ING_OPTS, src.item, function (v) { set('item', v); }));
+    if (ch === 'V' || ch === 'M') box.push(selectEl(prefix + 'dir', '方向', DIR_OPTS, src.dir, function (v) { set('dir', v); }));
+    if (ch === 'M') box.push(numEl(prefix + 'len', '移動格數', src.len || 2, 1, 8, function (v) { set('len', v); }));
+    if (ch === 'W') {
+      box.push(numEl(prefix + 'open', '開（秒）', src.open || 10, 1, 60, function (v) { set('open', v); }));
+      box.push(numEl(prefix + 'closed', '關（秒）', src.closed || 10, 1, 60, function (v) { set('closed', v); }));
+      box.push(numEl(prefix + 'offset', '起始偏移', src.offset || 0, 0, 60, function (v) { set('offset', v); }));
+    }
+    if (L.TILES[ch] && L.TILES[ch].station) box.push(selectEl(prefix + 'min', '出現人數', MIN_OPTS, src.min || 0, function (v) { set('min', +v); }));
+    if (ch === '#' || ch === ' ' || ch === 'V') box.push(selectEl(prefix + 'upTo', '人少時', UPTO_OPTS, src.upTo || 0, function (v) { set('upTo', +v); }));
+    return box;
+  }
+  function renderOpts() {
+    var o = $('opts'); o.textContent = '';
+    $('toolHint').textContent = HINTS[tool] || '';
+    if (tool === 'spawn') {
+      o.appendChild(selectEl('optSpawn', '下一個要放的出生點', [1,2,3,4,5,6,7,8].map(function (i) { return [i, i + ' 號']; }), spawnNo, function (v) { spawnNo = +v; }));
+      return;
+    }
+    if (tool === 'pick') {
+      if (!sel) { o.appendChild(el('div', { class: 'hint' }, '還沒選格子。')); return; }
+      var l = lv(), x = sel[0], y = sel[1], ch = l.grid[y][x], k = key(x, y);
+      var src = (l.props || {})[k] || {};
+      o.appendChild(el('div', { style: 'font-weight:900; width:100%' }, '(' + x + ',' + y + ') ' + L.TILES[ch].name));
+      var fs = fieldsFor(ch, src, function (name, v) {
+        snapshot(); l.props = l.props || {};
+        var p = l.props[k] = Object.assign({}, l.props[k] || {});
+        if (v === 0 && (name === 'min' || name === 'upTo')) delete p[name]; else p[name] = v;
+        if (!Object.keys(p).length) delete l.props[k];
+        changed();
+      }, 'sel_');
+      if (!fs.length) o.appendChild(el('div', { class: 'hint' }, '這種格子沒有其他設定。'));
+      fs.forEach(function (f) { o.appendChild(f); });
+      return;
+    }
+    fieldsFor(tool, opt, function (name, v) { opt[name] = v; }, 'opt_').forEach(function (f) { o.appendChild(f); });
+  }
+
+  function renderPlayers() {
+    var p = $('players'); p.textContent = '';
+    p.appendChild(el('span', { class: 'hint', style: 'font-weight:700' }, '人數'));
+    for (var i = 1; i <= 8; i++) (function (i) {
+      var bt = el('button', { type: 'button', 'aria-pressed': String(n === i), 'aria-label': i + ' 人' }, String(i));
+      bt.addEventListener('click', function () { n = i; renderPlayers(); renderBoard(); renderFacts(); });
+      p.appendChild(bt);
+    })(i);
+  }
+  function renderFacts() {
+    var d = L.DIFFICULTY[n], s = L.starsFor(lv(), n);
+    $('facts').textContent = n + ' 人：新訂單每 ' + d.orderEverySec + ' 秒，同時最多 ' + d.maxOrders + ' 張，三顆星門檻 ' + s.join(' / ') + ' 分';
+  }
+
+  function renderChecks() {
+    var r = L.validate(lv()), st = $('status'), m = $('msgs');
+    st.textContent = ''; m.textContent = '';
+    st.appendChild(el('span', null, '檢查結果'));
+    if (r.errors.length) st.appendChild(el('span', { class: 'pill err' }, r.errors.length + ' 個錯誤'));
+    if (r.warnings.length) st.appendChild(el('span', { class: 'pill warn' }, r.warnings.length + ' 個提醒'));
+    if (!r.errors.length && !r.warnings.length) st.appendChild(el('span', { class: 'pill ok' }, '1–8 人都能玩'));
+    else if (!r.errors.length) st.appendChild(el('span', { class: 'pill ok' }, '可以玩'));
+    r.errors.forEach(function (t) { m.appendChild(el('li', { class: 'err' }, t)); });
+    r.warnings.forEach(function (t) { m.appendChild(el('li', { class: 'warn' }, t)); });
+    return r;
+  }
+
+  // ── 關卡設定 ──
+  function renderLevelSel() {
+    var s = $('levelSel'); s.textContent = '';
+    levels.forEach(function (l, i) { var o = el('option', { value: i }, (l.id || '?') + ' ' + (l.name || '未命名')); if (i === cur) o.selected = true; s.appendChild(o); });
+  }
+  function renderFields() {
+    var l = lv();
+    $('fId').value = l.id || ''; $('fName').value = l.name || ''; $('fTime').value = l.timeSec || 180;
+    $('fW').value = l.grid[0].length; $('fH').value = l.grid.length;
+    var st = l.stars || [0, 0, 0]; $('fS1').value = st[0]; $('fS2').value = st[1]; $('fS3').value = st[2];
+    $('fNote').value = l.note || '';
+    var d = $('dishes'); d.textContent = '';
+    Object.keys(L.DISHES).forEach(function (id) {
+      var lab = el('label', { for: 'dish_' + id }), cb = el('input', { type: 'checkbox', id: 'dish_' + id });
+      cb.checked = (l.dishes || []).indexOf(id) >= 0;
+      cb.addEventListener('change', function () {
+        snapshot(); var arr = (l.dishes || []).filter(function (x) { return x !== id; });
+        if (cb.checked) arr.push(id);
+        l.dishes = Object.keys(L.DISHES).filter(function (k) { return arr.indexOf(k) >= 0; });
+        changed();
+      });
+      lab.appendChild(cb); lab.appendChild(document.createTextNode(L.DISHES[id].name + ' · ' + L.DISHES[id].score));
+      d.appendChild(lab);
+    });
+  }
+  function bindField(id, fn) {
+    $(id).addEventListener('change', function () { snapshot(); fn($(id).value); changed(); renderLevelSel(); });
+  }
+  bindField('fId', function (v) { lv().id = v.trim(); });
+  bindField('fName', function (v) { lv().name = v.trim(); });
+  bindField('fTime', function (v) { lv().timeSec = parseInt(v, 10) || 0; });
+  bindField('fNote', function (v) { lv().note = v; });
+  ['fS1', 'fS2', 'fS3'].forEach(function (id, i) { bindField(id, function (v) { var s = (lv().stars || [0, 0, 0]).slice(); s[i] = parseInt(v, 10) || 0; lv().stars = s; }); });
+  function resize() {
+    var l = lv(), W = Math.max(7, Math.min(20, parseInt($('fW').value, 10) || 7)), H = Math.max(7, Math.min(20, parseInt($('fH').value, 10) || 7));
+    $('fW').value = W; $('fH').value = H;
+    snapshot();
+    var g = [];
+    for (var y = 0; y < H; y++) {
+      var row = '';
+      for (var x = 0; x < W; x++) {
+        var edge = x === 0 || y === 0 || x === W - 1 || y === H - 1;
+        var old = l.grid[y] && l.grid[y][x];
+        row += old != null && !(edge && old === '.') ? old : (edge ? '#' : '.');
+      }
+      g.push(row);
+    }
+    l.grid = g;
+    Object.keys(l.props || {}).forEach(function (k) { var xy = k.split(',').map(Number); if (xy[0] >= W || xy[1] >= H) delete l.props[k]; });
+    l.spawns = (l.spawns || []).filter(function (s) { return s[0] < W && s[1] < H; });
+    l.zones = (l.zones || []).filter(function (z) { return z.x < W && z.y < H; });
+    changed();
+  }
+  $('fW').addEventListener('change', resize); $('fH').addEventListener('change', resize);
+
+  function selectLevel(i) { cur = i; sel = null; undo = []; $('undoBtn').disabled = true; save(); renderAll(); }
+  $('levelSel').addEventListener('change', function () { selectLevel(+$('levelSel').value); });
+  function blank() {
+    var g = [];
+    for (var y = 0; y < 11; y++) { var r = ''; for (var x = 0; x < 13; x++) r += (x === 0 || y === 0 || x === 12 || y === 10) ? '#' : '.'; g.push(r); }
+    return { id: 'new', name: '新關卡', timeSec: 180, grid: g, props: {}, spawns: [], dishes: ['tomato_soup'], stars: [200, 400, 600], zones: [], note: '' };
+  }
+  $('newBtn').addEventListener('click', function () { levels.push(blank()); selectLevel(levels.length - 1); toast('已新增空白關卡'); });
+  $('dupBtn').addEventListener('click', function () { var c = clone(lv()); c.id = (c.id || '') + '-copy'; c.name = (c.name || '') + '（複製）'; levels.push(c); selectLevel(levels.length - 1); toast('已複製成新關卡'); });
+  $('undoBtn').disabled = true;
+  $('undoBtn').addEventListener('click', function () {
+    if (!undo.length) return;
+    levels = JSON.parse(undo.pop()); cur = Math.min(cur, levels.length - 1);
+    $('undoBtn').disabled = !undo.length; save(); renderAll();
+  });
+
+  function askConfirm(text, okLabel, onOk) {
+    var box = $('confirmBox'); box.textContent = '';
+    var c = el('div', { class: 'confirm', role: 'alert' }); c.appendChild(el('div', null, text));
+    var row = el('div', { class: 'row' });
+    var ok = el('button', { type: 'button', class: 'primary' }, okLabel), no = el('button', { type: 'button' }, '取消');
+    ok.addEventListener('click', function () { box.textContent = ''; onOk(); });
+    no.addEventListener('click', function () { box.textContent = ''; });
+    row.appendChild(ok); row.appendChild(no); c.appendChild(row); box.appendChild(c); ok.focus();
+  }
+  $('delBtn').addEventListener('click', function () {
+    if (levels.length <= 1) { toast('至少要留一關'); return; }
+    askConfirm('刪除「' + lv().name + '」？刪掉後可以按「復原」救回來。', '刪除', function () {
+      snapshot(); levels.splice(cur, 1); cur = Math.max(0, cur - 1); save(); renderAll(); $('undoBtn').disabled = false;
+    });
+  });
+  $('resetBtn').addEventListener('click', function () {
+    askConfirm('把所有草稿換回內建 5 關？你改過的關卡會被取代（可以按「復原」）。', '還原', function () {
+      snapshot(); levels = clone(BUILTIN); cur = 0; save(); renderAll(); $('undoBtn').disabled = false; toast('已還原內建 5 關');
+    });
+  });
+
+  // ── 匯出入 ──
+  function clean(l) {
+    var o = { id: l.id, name: l.name, timeSec: l.timeSec, grid: l.grid, props: l.props || {}, spawns: l.spawns || [], dishes: l.dishes || [], stars: l.stars || [], zones: l.zones || [], note: l.note || '' };
+    return o;
+  }
+  $('expOne').addEventListener('click', function () {
+    var r = L.validate(lv());
+    $('io').value = JSON.stringify(clean(lv()), null, 1);
+    toast(r.errors.length ? '已產生，但這一關還有 ' + r.errors.length + ' 個錯誤' : '已產生這一關的 JSON');
+  });
+  $('expAll').addEventListener('click', function () {
+    var bad = levels.filter(function (l) { return L.validate(l).errors.length; }).length;
+    $('io').value = JSON.stringify(levels.map(clean), null, 1);
+    toast(bad ? '已產生，但有 ' + bad + ' 關還有錯誤' : '已產生全部 ' + levels.length + ' 關');
+  });
+  $('copyBtn').addEventListener('click', function () {
+    var t = $('io');
+    if (!t.value) { $('expOne').click(); }
+    var done = function () { toast('已複製'); };
+    var fallback = function () { t.focus(); t.select(); toast('請用系統的「拷貝」複製選取的文字'); };
+    try { navigator.clipboard.writeText(t.value).then(done, fallback); } catch (e) { fallback(); }
+  });
+  $('impBtn').addEventListener('click', function () {
+    var data;
+    try { data = JSON.parse($('io').value); } catch (e) { toast('看不懂這段 JSON，請確認有完整貼上'); return; }
+    var arr = Array.isArray(data) ? data : [data];
+    var ok = arr.filter(function (l) { return l && Array.isArray(l.grid) && l.grid.length && typeof l.grid[0] === 'string'; });
+    if (!ok.length) { toast('裡面找不到關卡（需要 grid）'); return; }
+    snapshot();
+    ok.forEach(function (l) {
+      var c = clean(l), i = levels.findIndex(function (x) { return x.id && x.id === c.id; });
+      if (i >= 0) levels[i] = c; else levels.push(c);
+    });
+    cur = levels.findIndex(function (x) { return x.id === clean(ok[0]).id; });
+    if (cur < 0) cur = levels.length - 1;
+    save(); renderAll(); toast('已讀入 ' + ok.length + ' 關（同編號的會被取代）');
+  });
+
+  // ── 模式 ──
+  function setMode(m) {
+    mode = m; $('modeEdit').setAttribute('aria-pressed', String(m === 'edit')); $('modePreview').setAttribute('aria-pressed', String(m === 'preview'));
+    renderBoard();
+  }
+  $('modeEdit').addEventListener('click', function () { setMode('edit'); });
+  $('modePreview').addEventListener('click', function () { setMode('preview'); });
+
+  var board = $('board');
+  board.addEventListener('pointerdown', onDown);
+  window.addEventListener('pointermove', onMove);
+  window.addEventListener('pointerup', function () { painting = false; });
+  window.addEventListener('pointercancel', function () { painting = false; });
+  window.addEventListener('resize', function () { renderBoard(); });
+
+  function renderAll() { renderLevelSel(); renderPlayers(); renderTools(); renderOpts(); renderFields(); renderBoard(); renderChecks(); renderFacts(); }
+  load(); renderAll();
+})();
+</script>

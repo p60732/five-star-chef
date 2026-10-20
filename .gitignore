@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+*.keystore
+*.p12
+*.mobileprovision
+.DS_Store

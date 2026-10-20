@@ -1,0 +1,10 @@
+{
+  "name": "five-star-chef",
+  "version": "0.0.1",
+  "private": true,
+  "description": "五星大主廚：手機上 1–8 人線上合作的限時料理遊戲",
+  "scripts": {
+    "test": "node tests/level.test.js",
+    "build:editor": "node tools/level-editor/build.js"
+  }
+}
