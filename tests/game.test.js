@@ -75,7 +75,11 @@ t('閉環：番茄湯 拿→切→下鍋 ×3→煮→裝盤→出餐→髒盤回
   assert.ok(held(s).dirty);
   s = at(s, 8, 3, 'E'); s = press(s, 'grab');                // 放水槽
   s = holdUse(s, Game.CFG.washSec + 0.1);                    // 洗
-  assert.strictEqual(s.tiles['1,7'].clean, platesStart, '洗好的盤子回到盤架，數量回到原點');
+  assert.strictEqual(s.tiles['9,3'].clean, 1, '洗好的盤子放在水槽旁');
+  s = press(s, 'grab');                                      // 從水槽旁拿乾淨盤子
+  assert.ok(held(s) && held(s).kind === 'plate' && !held(s).dirty);
+  s = at(s, 1, 6, 'S'); s = press(s, 'grab');                // 放回盤架
+  assert.strictEqual(s.tiles['1,7'].clean, platesStart, '盤子回到原點');
   assert.strictEqual(s.stats.spawned, 3); assert.strictEqual(s.stats.merged, 3);
 });
 
@@ -261,7 +265,7 @@ t('洗碗：按一下會把水槽裡的盤子一個接一個洗完', () => {
   s.tiles['9,3'].dirty = 2; s.tiles['1,7'].clean -= 2;      // 測試用：兩個髒盤放進水槽
   s = at(s, 8, 3, 'E'); s = press(s, 'use');
   s = wait(s, Game.CFG.washSec * 2 + 0.2);
-  assert.strictEqual(s.tiles['9,3'].dirty, 0); assert.strictEqual(s.tiles['1,7'].clean, Game.CFG.plates);
+  assert.strictEqual(s.tiles['9,3'].dirty, 0); assert.strictEqual(s.tiles['9,3'].clean, 2);
 });
 
 t('對準：沒有正對著也能拿到斜前方的生菜箱', () => {
@@ -328,7 +332,10 @@ t('一顆鍵：空手對水槽 → 洗；拿著髒盤對水槽 → 放進去', (
   assert.strictEqual(s.tiles['9,3'].dirty, 1);
   s = press(s, 'act');                                       // 空手再按 → 洗
   s = wait(s, Game.CFG.washSec + 0.1);
-  assert.strictEqual(s.tiles['1,7'].clean, Game.CFG.plates);
+  assert.strictEqual(s.tiles['9,3'].clean, 1, '洗好的盤子在水槽旁');
+  assert.strictEqual(Game.describe(s, 0).act, '拿盤子');
+  s = press(s, 'act');
+  assert.ok(held(s) && !held(s).dirty);
 });
 
 t('一顆鍵：番茄湯完整閉環只用移動、主按鍵', () => {
@@ -402,7 +409,6 @@ t('托盤不能混不同食材、也不能超過 3 份', () => {
   const pid = s.players[0].held;
   s.items[pid].contents = ['onion:cut', 'onion:cut', 'onion:cut'];
   s.stats.spawned += 3; s.stats.merged += 3;
-  s = at(s, 2, 2, 'N'); s = press(s, 'act'); // 盤子拿著不能拿箱子 → 不變
   s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'cut', chop: 1, at: { tile: '4,1' } };
   s.tiles['4,1'].holds = 'x1'; s.stats.spawned += 1;
   s = at(s, 4, 2, 'N'); s = press(s, 'act');
@@ -444,6 +450,41 @@ t('丟進檯面上的盤子', () => {
   s = chopOne(s, 2, 4);
   s = at(s, 3, 4, 'N'); s = press(s, 'throw'); s = wait(s, 0.6);
   assert.deepStrictEqual(s.items[s.tiles['3,1'].holds].contents, ['lettuce:cut']);
+});
+
+t('訂單不中斷：全部出完 2 秒內就有新訂單', () => {
+  let s = newGame('tomato_soup');
+  s = wait(s, Game.CFG.firstOrderSec + 0.1);
+  s.orders = []; s.nextOrderIn = 30;                           // 模擬剛出完餐
+  s = wait(s, Game.CFG.refillSec + 0.1);
+  assert.strictEqual(s.orders.length, 1);
+});
+
+t('訂單不中斷：滿了的時候，一出餐空出位子就補', () => {
+  let s = newGame('tomato_soup');
+  s = wait(s, 80);                                             // 1 人：最多 2 張
+  assert.strictEqual(s.orders.length, 2);
+  s.orders.pop();
+  s = wait(s, 0.2);
+  assert.strictEqual(s.orders.length, 2, '應該馬上補上');
+});
+
+t('食材箱：上面放了東西就打不開，先拿走上面的', () => {
+  let s = newGame('salad');
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');                 // 放在生菜箱上
+  assert.ok(s.tiles['2,1'].holds, '盤子放在箱子上');
+  s = press(s, 'act');                                       // 空手再按 → 拿起的是盤子，不是生菜
+  assert.strictEqual(held(s).kind, 'plate');
+  s = press(s, 'act'); s = press(s, 'act');                  // 放回去再拿一次也一樣
+  assert.strictEqual(held(s).kind, 'plate');
+  assert.strictEqual(s.stats.spawned, 0, '沒有拿出任何生菜');
+});
+
+t('食材箱：上面空的就能拿出食材', () => {
+  let s = newGame('salad');
+  s = at(s, 2, 2, 'N'); assert.strictEqual(Game.describe(s, 0).act, '拿生菜');
+  s = press(s, 'act'); assert.strictEqual(held(s).name, 'lettuce');
 });
 
 // 突變：守恆檢查真的會抓到錯

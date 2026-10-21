@@ -109,15 +109,16 @@
         if (ch === 'K') { top = box(0.8, 0.08, 0.8, COL.sink, 0.04); var w2 = box(0.6, 0.02, 0.6, COL.water, false); w2.position.y = 0.05; top.add(w2); }
         if (ch === 'O') { top = box(1, 0.06, 1, 0xFFD27A, false); var bell = sph(0.14, 0xD9952B, 0.08); bell.position.set(0.3, 0.12, -0.3); top.add(bell); }
         if (ch === 'I') {
-          top = box(0.9, 0.12, 0.9, 0xA67D52, false);
+          // 箱子：深色邊框＋淺色蓋子，正面貼一條食材顏色的標籤
+          top = box(0.92, 0.04, 0.92, 0xC9A27A, false);
           var item = (state.tiles[x + ',' + y] || {}).item, c = ING[item] ? ING[item].raw : 0xffffff;
-          for (var i = 0; i < 3; i++) { var b = sph(0.19, c, 0.07); b.position.set(-0.25 + i * 0.25, 0.18, (i % 2) * 0.14 - 0.07); top.add(b); }
+          var tag = box(0.6, 0.16, 0.02, c, false); tag.position.set(0, -0.2, 0.47); top.add(tag);
         }
         if (ch === 'V') { top = box(1, 0.05, 0.7, 0x2B4A60, false); }
         if (ch === 'W') { top = box(1, 0.06, 1, 0xD49A52, false); }
         if (top) { top.position.set(cx, CH + 0.03, cz); world.add(top); }
         // 會變動的格子內容
-        if ('PRKS'.indexOf(ch) >= 0) { var dg = new T.Group(); dg.position.set(cx, CH + 0.06, cz); dyn.add(dg); tileDyn[x + ',' + y] = { ch: ch, g: dg, sig: '' }; }
+        if ('PRKSI'.indexOf(ch) >= 0) { var dg = new T.Group(); dg.position.set(cx, CH + 0.06, cz); dyn.add(dg); tileDyn[x + ',' + y] = { ch: ch, g: dg, sig: '' }; }
       }
       state.players.forEach(function (p, i) { var m = makePlayer(i); dyn.add(m); playerMeshes.push(m); });
       resize();
@@ -226,13 +227,23 @@
       for (var tk in tileDyn) {
         var td = tileDyn[tk], t = cur.tiles[tk], s2 = '';
         if (td.ch === 'P') s2 = 'c' + t.clean;
-        if (td.ch === 'R' || td.ch === 'K') s2 = 'd' + t.dirty;
+        if (td.ch === 'R') s2 = 'd' + t.dirty;
+        if (td.ch === 'K') s2 = 'd' + t.dirty + 'c' + t.clean;
+        if (td.ch === 'I') s2 = t.holds ? 'covered' : 'open';
         if (td.ch === 'S') s2 = t.pot.contents.join(',') + (t.pot.burnt ? 'B' : '') + (window.Game.potReady(t.pot) ? 'R' : '');
         if (s2 === td.sig) continue;
         td.sig = s2; clearGroup(td.g);
         if (td.ch === 'P') for (var i = 0; i < Math.min(t.clean, 8); i++) { var pl = cyl(0.3, 0.05, COL.plate, 0.05, 24); pl.position.y = 0.03 + i * 0.06; td.g.add(pl); }
         if (td.ch === 'R') for (var j = 0; j < Math.min(t.dirty, 8); j++) { var dp = cyl(0.3, 0.05, COL.dirty, 0.05, 24); dp.position.y = 0.03 + j * 0.06; td.g.add(dp); }
-        if (td.ch === 'K') for (var q = 0; q < Math.min(t.dirty, 4); q++) { var sp = cyl(0.26, 0.04, COL.dirty, false, 20); sp.position.set(0, 0.04 + q * 0.05, 0); sp.rotation.x = 0.3; td.g.add(sp); }
+        if (td.ch === 'K') {
+          for (var q = 0; q < Math.min(t.dirty, 4); q++) { var sp = cyl(0.22, 0.04, COL.dirty, false, 20); sp.position.set(-0.1, 0.04 + q * 0.05, -0.05); sp.rotation.x = 0.3; td.g.add(sp); }
+          // 洗好的盤子疊在水槽旁（右前角）
+          for (var cq = 0; cq < Math.min(t.clean, 8); cq++) { var cp = cyl(0.2, 0.04, COL.plate, 0.06, 20); cp.position.set(0.24, 0.05 + cq * 0.05, 0.24); td.g.add(cp); }
+        }
+        if (td.ch === 'I' && !t.holds) {
+          // 跟拿在手上的是同一個模型
+          var shown = makeItem({ kind: 'ing', name: t.item, state: 'raw' }); shown.position.y = 0.0; td.g.add(shown);
+        }
         if (td.ch === 'S') {
           var pot = t.pot, n = pot.contents.length;
           if (n) {

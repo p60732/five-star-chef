@@ -29,7 +29,8 @@
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
     patience: { salad: 50, tomato_soup: 70, onion_soup: 70, mushroom_soup: 70, tomato_noodle: 80 },
-    firstOrderSec: 2
+    firstOrderSec: 2,
+    refillSec: 2           // 訂單全清空後，最多等幾秒補下一張
   };
 
   var CHOPPABLE = { tomato: 1, lettuce: 1, onion: 1, mushroom: 1 };
@@ -70,8 +71,8 @@
         if (ch === 'S') tiles[k] = { pot: { contents: [], cook: 0, burnt: false } };
         if (ch === 'P') { tiles[k] = { clean: 0 }; if (!firstRack) firstRack = k; }
         if (ch === 'R') { tiles[k] = { dirty: 0 }; returns.push(k); }
-        if (ch === 'K') tiles[k] = { dirty: 0, wash: 0 };
-        if (ch === 'I') tiles[k] = { item: (props[k] || {}).item };
+        if (ch === 'K') tiles[k] = { dirty: 0, wash: 0, clean: 0 };   // clean：洗好、放在水槽旁的盤子
+        if (ch === 'I') tiles[k] = { item: (props[k] || {}).item, holds: null };   // 箱子上可以暫放東西；放了就打不開
       }
     });
     if (firstRack) tiles[firstRack].clean = level.plates || CFG.plates;
@@ -198,7 +199,7 @@
   function useOk(s, p, c) {
     var ch = cellAt(s, c[0], c[1]), t = s.tiles[key(c[0], c[1])];
     if (ch === 'B' && !p.held && t.holds) { var it = s.items[t.holds]; return isIng(it) && it.state === 'raw' && !!CHOPPABLE[it.name]; }
-    if (ch === 'K' && !p.held && t.dirty > 0 && !!s.rack) return true;
+    if (ch === 'K' && !p.held && t.dirty > 0) return true;
     if (ch === 'S' && t.pot.burnt) return true;
     return false;
   }
@@ -265,6 +266,7 @@
         p.held = ni.id; s.stats.spawned++; return 'crate';
       }
       if (ch === 'P' && t.clean > 0) { t.clean--; p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], at: { hand: p.id } }).id; return 'plate'; }
+      if (ch === 'K' && t.clean > 0 && t.dirty === 0) { t.clean--; p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], at: { hand: p.id } }).id; return 'plate'; }
       if (ch === 'R' && t.dirty > 0) { t.dirty--; p.held = newItem(s, { kind: 'plate', dirty: true, contents: [], at: { hand: p.id } }).id; return 'dirty'; }
       return null;
     }
@@ -429,7 +431,7 @@
     } else {
       t.wash += dt / CFG.washSec;
       if (t.wash >= 1) {
-        t.wash = 0; t.dirty--; s.tiles[s.rack].clean++; s.events.push({ t: 'washed', pid: p.id });
+        t.wash = 0; t.dirty--; t.clean++; s.events.push({ t: 'washed', pid: p.id });
         if (t.dirty <= 0) p.busy = null;                  // 有好幾個髒盤就接著洗
       }
     }
@@ -472,14 +474,15 @@
         s.events.push({ t: 'expired', dish: o.dish });
       }
     }
+    // 訂單不中斷：清空了 2 秒內補一張；滿了就等有空位馬上補，不重新計時
+    if (!s.orders.length) s.nextOrderIn = Math.min(s.nextOrderIn, CFG.refillSec);
     s.nextOrderIn -= dt;
     if (s.nextOrderIn <= 0) {
-      if (s.orders.length < s.difficulty.maxOrders && s.dishes.length) {
-        var dish = s.dishes[Math.floor(rand(s) * s.dishes.length)];
-        var pat = Math.round((CFG.patience[dish] || 60) * (s.difficulty.patienceScale || 1));
-        s.orders.push({ id: s.nextOrderId++, dish: dish, timeLeft: pat, total: pat });
-        s.events.push({ t: 'order', dish: dish });
-      }
+      if (s.orders.length >= s.difficulty.maxOrders || !s.dishes.length) { s.nextOrderIn = 0; return; }
+      var dish = s.dishes[Math.floor(rand(s) * s.dishes.length)];
+      var pat = Math.round((CFG.patience[dish] || 60) * (s.difficulty.patienceScale || 1));
+      s.orders.push({ id: s.nextOrderId++, dish: dish, timeLeft: pat, total: pat });
+      s.events.push({ t: 'order', dish: dish });
       s.nextOrderIn = s.difficulty.orderEverySec;
     }
   }
@@ -601,7 +604,7 @@
     }
     if (ch === 'P' && t) out.target = '盤架（' + t.clean + ' 個）';
     if (ch === 'R' && t) out.target = '回收口（' + t.dirty + ' 個髒盤）';
-    if (ch === 'K' && t) out.target = '水槽（' + t.dirty + ' 個待洗）';
+    if (ch === 'K' && t) out.target = '水槽（' + (t.dirty ? t.dirty + ' 個待洗' : '') + (t.dirty && t.clean ? '、' : '') + (t.clean ? t.clean + ' 個乾淨' : '') + (!t.dirty && !t.clean ? '空的' : '') + '）';
     if (ch === '.') out.target = '';
 
     // 試算按「拿」會發生什麼，但不真的改狀態
