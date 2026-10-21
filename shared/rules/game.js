@@ -39,6 +39,7 @@
     counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
+    wrongPenalty: 20,      // 送錯餐扣分（照樣收走，盤子會回來）
     patience: { salad: 50, tomato_soup: 70, onion_soup: 70, mushroom_soup: 70, tomato_noodle: 80 },
     firstOrderSec: 2,
     refillSec: 2           // 訂單全清空後，最多等幾秒補下一張
@@ -387,7 +388,13 @@
     for (var i = 0; i < s.orders.length; i++) {
       if (SIGNATURE[s.orders[i].dish].slice().sort().join('|') === got) { idx = i; break; }
     }
-    if (idx < 0) { s.events.push({ t: 'wrong', pid: p.id }); return null; }
+    if (idx < 0) {                                        // 送錯：照樣送出、扣分，訂單保留，盤子之後回來
+      s.score -= CFG.wrongPenalty; s.stats.wrong = (s.stats.wrong || 0) + 1; s.stats.penalty += CFG.wrongPenalty;
+      removeItem(s, held.id); p.held = null;
+      s.pendingReturn.push(CFG.returnSec);
+      s.events.push({ t: 'wrong', pid: p.id, points: -CFG.wrongPenalty });
+      return 'serveWrong';
+    }
     var o = s.orders[idx], dish = Level.DISHES[o.dish];
     var tip = Math.round(CFG.tipMax * o.timeLeft / o.total);
     s.score += dish.score + tip;
@@ -798,9 +805,8 @@
     var test = clone(s), r = grab(test, test.players[pid]);
     var GRAB = { pick: '拿起', crate: '拿' + (t && t.item ? NAMES[t.item] : ''), plate: '拿盤子', dirty: '拿髒盤', pickFloor: '撿起來',
       place: '放下', toPlate: '裝盤', toPot: '放進鍋', fromPot: '盛到盤子', serve: '出餐', trash: '丟掉', trashPlate: '倒掉盤裡的菜',
-      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', trashPot: '倒掉鍋裡的東西', potToPlate: '倒進盤子', scrapeBurnt: '把焦掉的接出來' };
+      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', serveWrong: '出餐（不是訂單上的菜，會扣分）', trashPot: '倒掉鍋裡的東西', potToPlate: '倒進盤子', scrapeBurnt: '把焦掉的接出來' };
     out.grab = r ? GRAB[r] : '';
-    if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
     out.use = '';
     if (uc) {
       var uch = cellAt(s, uc[0], uc[1]), ut = s.tiles[key(uc[0], uc[1])];
@@ -815,7 +821,6 @@
       var bt = s.tiles[key(p.busy.x, p.busy.y)];
       out.act = p.busy.kind === 'chop' && bt.holds ? '切菜中 ' + Math.round(s.items[bt.holds].chop * 100) + '%' : '洗碗中';
     }
-    if (ch === 'O' && isPlate(held) && held.contents.length && !ra) out.act = '沒有這道菜的訂單';
     return out;
   }
 

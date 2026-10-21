@@ -164,16 +164,24 @@ t('煮過頭會燒焦；空手按動作只會把鍋子拿起來，不會直接�
   assert.ok(held(s).kind === 'pot' && held(s).burnt, '拿起燒焦的鍋');
 });
 
-t('錯的菜不能出餐，盤子留在手上', () => {
+t('送錯餐：照樣送出、扣分，訂單還在，盤子之後會回來', () => {
   let s = newGame('tomato_soup');
   s = wait(s, Game.CFG.firstOrderSec + 0.1);
   s.dishes = ['tomato_soup', 'salad'];
   s = at(s, 1, 6, 'S'); s = press(s, 'grab');
   s = at(s, 3, 2, 'N'); s = press(s, 'grab');
   s = chopOne(s, 2, 4); s = at(s, 3, 2, 'N'); s = press(s, 'grab'); s = press(s, 'grab');
-  s = at(s, 5, 6, 'S'); s = press(s, 'grab');
-  assert.strictEqual(s.stats.served, 0);
-  assert.ok(held(s) && held(s).kind === 'plate');
+  s = at(s, 5, 6, 'S');
+  assert.strictEqual(Game.describe(s, 0).act, '出餐（不是訂單上的菜，會扣分）');
+  const orders = s.orders.length;
+  s = press(s, 'act');
+  assert.ok(!s.players[0].held, '盤子送出去了');
+  assert.strictEqual(s.stats.served, 0); assert.strictEqual(s.stats.wrong, 1);
+  assert.strictEqual(s.score, -Game.CFG.wrongPenalty);
+  assert.strictEqual(s.orders.length, orders, '訂單還在');
+  assert.deepStrictEqual(Game.checkInvariants(s), []);
+  s = wait(s, Game.CFG.returnSec + 0.1);
+  assert.strictEqual(s.tiles['2,7'].dirty, 1, '盤子回到回收口');
 });
 
 t('訂單逾時扣分', () => {
@@ -547,7 +555,7 @@ t('生的食材不能放上盤子（單個或一疊都不行）', () => {
   assert.strictEqual(held(s).state, 'raw');
 });
 
-t('燒焦：空盤可以把焦掉的接出來，再倒進垃圾桶；不能出餐', () => {
+t('燒焦：空盤可以把焦掉的接出來，再倒進垃圾桶', () => {
   let s = newGame('tomato_soup');
   Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true });
   s.stats.spawned = 3; s.stats.merged = 3;
@@ -557,8 +565,6 @@ t('燒焦：空盤可以把焦掉的接出來，再倒進垃圾桶；不能出�
   s = press(s, 'act');
   assert.deepStrictEqual(held(s).contents, ['burnt']);
   assert.ok(!potAt(s, '7,1').burnt && !potAt(s, '7,1').contents.length, '鍋子空了，還在爐子上');
-  s = at(s, 5, 6, 'S'); s = press(s, 'act');                 // 不能出餐
-  assert.deepStrictEqual(held(s).contents, ['burnt']);
   s = at(s, 9, 6, 'S'); s = press(s, 'act');                 // 垃圾桶倒掉
   assert.deepStrictEqual(held(s).contents, []);
 });

@@ -78,7 +78,7 @@
   function handleEvents(evs) {
     evs.forEach(function (e) {
       if (e.t === 'served') { floatAtPlayer(e.pid, '+' + e.points, 'good'); toast(DISH(e.dish) + ' 出餐！'); }
-      if (e.t === 'wrong') toast('沒有這道菜的訂單');
+      if (e.t === 'wrong') { floatAtPlayer(e.pid, '' + e.points, 'bad'); toast('送錯餐了！不是訂單上的菜 ' + e.points); }
       if (e.t === 'expired') toast(DISH(e.dish) + ' 等太久，客人走了 −' + Game.CFG.expirePenalty);
       if (e.t === 'burnt') toast('鍋子燒焦了！用空盤接出來，或整鍋搬到垃圾桶倒掉');
       if (e.t === 'order') pulse('orders');
@@ -199,7 +199,7 @@
     $('endNext').textContent = next ? '再 ' + (next - cur.score) + ' 分拿下一顆星（門檻 ' + cur.stars.join(' / ') + '）' : '三顆星滿分！';
     $('eServed').textContent = '出餐 ' + st.served + ' 道'; $('eBase').textContent = '+' + st.base;
     $('eTips').textContent = '+' + st.tips;
-    $('eFailed').textContent = '逾時 ' + st.failed + ' 道'; $('ePenalty').textContent = '−' + st.penalty;
+    $('eFailed').textContent = '逾時 ' + st.failed + ' 道' + (st.wrong ? '、送錯 ' + st.wrong + ' 道' : ''); $('ePenalty').textContent = '−' + st.penalty;
     $('eTotal').textContent = cur.score;
   }
 
