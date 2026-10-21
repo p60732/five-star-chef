@@ -80,7 +80,7 @@
       if (e.t === 'served') { floatAtPlayer(e.pid, '+' + e.points, 'good'); toast(DISH(e.dish) + ' 出餐！'); }
       if (e.t === 'wrong') toast('沒有這道菜的訂單');
       if (e.t === 'expired') toast(DISH(e.dish) + ' 等太久，客人走了 −' + Game.CFG.expirePenalty);
-      if (e.t === 'burnt') toast('鍋子燒焦了！把鍋子拿起來，搬到垃圾桶倒掉');
+      if (e.t === 'burnt') toast('鍋子燒焦了！用空盤接出來，或整鍋搬到垃圾桶倒掉');
       if (e.t === 'order') pulse('orders');
       if (e.t === 'chopped') floatAtPlayer(e.pid, '切好了', '');
       if (e.t === 'washed') floatAtPlayer(e.pid, '洗好了', '');

@@ -547,14 +547,32 @@ t('生的食材不能放上盤子（單個或一疊都不行）', () => {
   assert.strictEqual(held(s).state, 'raw');
 });
 
-t('燒焦：拿盤子對焦鍋什麼都不會發生（只能整鍋搬去倒）', () => {
+t('燒焦：空盤可以把焦掉的接出來，再倒進垃圾桶；不能出餐', () => {
   let s = newGame('tomato_soup');
   Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true });
   s.stats.spawned = 3; s.stats.merged = 3;
   s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 空盤
-  s = at(s, 7, 2, 'N'); s = press(s, 'act');
+  s = at(s, 7, 2, 'N');
+  assert.strictEqual(Game.describe(s, 0).act, '把焦掉的接出來');
+  s = press(s, 'act');
+  assert.deepStrictEqual(held(s).contents, ['burnt']);
+  assert.ok(!potAt(s, '7,1').burnt && !potAt(s, '7,1').contents.length, '鍋子空了，還在爐子上');
+  s = at(s, 5, 6, 'S'); s = press(s, 'act');                 // 不能出餐
+  assert.deepStrictEqual(held(s).contents, ['burnt']);
+  s = at(s, 9, 6, 'S'); s = press(s, 'act');                 // 垃圾桶倒掉
   assert.deepStrictEqual(held(s).contents, []);
-  assert.ok(potAt(s, '7,1').burnt);
+});
+
+t('燒焦：拿著焦鍋對檯面上的空盤，也可以倒進去', () => {
+  let s = newGame('tomato_soup');
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true });
+  s.stats.spawned = 3; s.stats.merged = 3;
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 空盤放 (3,1)
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿焦鍋
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');
+  assert.deepStrictEqual(s.items[s.tiles['3,1'].holds].contents, ['burnt']);
+  assert.ok(!held(s).burnt);
 });
 
 t('燒焦：盤子上有切好的食材時去接，什麼都不會發生（菜不會不見、鍋也不會被清掉）', () => {

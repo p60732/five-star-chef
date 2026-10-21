@@ -194,6 +194,7 @@
     pot.contents.push(it.name); removeItem(s, it.id); s.stats.merged++;
   }
   function emptyPot(pot) { pot.contents = []; pot.cook = 0; pot.burnt = false; }
+  function emptySingle(plate) { return !plate.dirty && !plate.contents.length && pn(plate) === 1; }
   // 托盤（盤子上同一種切好的湯料）倒進鍋；回傳倒了幾份
   function pourTray(plate, pot) {
     if (!isTray(plate)) return 0;
@@ -211,6 +212,9 @@
     if (isPot(held) && isIng(on) && potAccepts(held, on)) { putInPot(s, held, on); t.holds = null; return 'toPot'; }
     if (isPot(on) && isPlate(held) && pourTray(held, on)) return 'pour';
     if (isPot(held) && isPlate(on) && pourTray(on, held)) return 'pour';
+    // 燒焦的：空盤可以把焦掉的接出來（之後倒進垃圾桶）；拿著焦鍋對空盤也可以倒進去
+    if (isPot(on) && isPlate(held) && on.burnt && emptySingle(held)) { held.contents.push('burnt'); emptyPot(on); return 'scrapeBurnt'; }
+    if (isPot(held) && isPlate(on) && held.burnt && emptySingle(on)) { on.contents.push('burnt'); emptyPot(held); return 'scrapeBurnt'; }
     if (isPot(on) && isPlate(held) && potReady(on) && plateCanTake(s, held, potOutput(on))) { held.contents.push(potOutput(on)); emptyPot(on); return 'fromPot'; }
     if (isPot(held) && isPlate(on) && potReady(held) && plateCanTake(s, on, potOutput(held))) { on.contents.push(potOutput(held)); emptyPot(held); return 'potToPlate'; }
     return null;
@@ -690,7 +694,7 @@
     var test = clone(s), r = grab(test, test.players[pid]);
     var GRAB = { pick: '拿起', crate: '拿' + (t && t.item ? NAMES[t.item] : ''), plate: '拿盤子', dirty: '拿髒盤', pickFloor: '撿起來',
       place: '放下', toPlate: '裝盤', toPot: '放進鍋', fromPot: '盛到盤子', serve: '出餐', trash: '丟掉', trashPlate: '倒掉盤裡的菜',
-      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', trashPot: '倒掉鍋裡的東西', potToPlate: '倒進盤子' };
+      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', trashPot: '倒掉鍋裡的東西', potToPlate: '倒進盤子', scrapeBurnt: '把焦掉的接出來' };
     out.grab = r ? GRAB[r] : '';
     if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
     out.use = '';
