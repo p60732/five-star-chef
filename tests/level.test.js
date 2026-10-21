@@ -24,8 +24,8 @@ t('檢查不會改到傳入的關卡', () => {
 
 t('依人數展開：5 人以上才出現的爐子，4 人時變檯面', () => {
   const lv = levels[0];
-  assert.strictEqual(Level.resolve(lv, 4).cells[4][9], 'C');
-  assert.strictEqual(Level.resolve(lv, 5).cells[4][9], 'S');
+  assert.strictEqual(Level.resolve(lv, 4).cells[4][1], 'C');
+  assert.strictEqual(Level.resolve(lv, 5).cells[4][1], 'S');
 });
 
 t('依人數展開：1 人時檯面變門，2 人時還是檯面', () => {

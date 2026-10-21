@@ -57,7 +57,7 @@
     tomato_noodle: ['noodle:cooked', 'tomato:cut']
   };
   var DIR4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-  var HOLD_TILES = { C: 1, B: 1, V: 1, M: 1, W: 1 };   // 能放東西的格子
+  var HOLD_TILES = { C: 1, B: 1, V: 1, M: 1, W: 1, D: 1 };   // 能放東西的格子
 
   function key(x, y) { return x + ',' + y; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -93,11 +93,15 @@
     cells.forEach(function (row, y) {
       for (var x = 0; x < row.length; x++) {
         if (row[x] !== 'K') continue;
+        // 水槽＋晾盤架兩格一組：優先找相鄰的晾盤架 D，沒有才用相鄰檯面
         var order = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        for (var i = 0; i < order.length; i++) {
-          var nx = x + order[i][0], ny = y + order[i][1];
-          if (ny >= 0 && ny < cells.length && nx >= 0 && nx < row.length && cells[ny][nx] === 'C') { tiles[key(x, y)].dry = key(nx, ny); break; }
-        }
+        ['D', 'C'].some(function (want) {
+          for (var i = 0; i < order.length; i++) {
+            var nx = x + order[i][0], ny = y + order[i][1];
+            if (ny >= 0 && ny < cells.length && nx >= 0 && nx < row.length && cells[ny][nx] === want) { tiles[key(x, y)].dry = key(nx, ny); return true; }
+          }
+          return false;
+        });
       }
     });
     var items = {}, nextId = 1;
@@ -326,7 +330,7 @@
     }
     var fc = facingCell(p);
     if (walkable(s, fc[0], fc[1])) { held.at = { floor: [fc[0] + 0.5, fc[1] + 0.5] }; p.held = null; return 'drop'; }
-    if (walkable(s, Math.floor(p.x), Math.floor(p.y))) { held.at = { floor: pushOut(s, p.x, p.y) }; p.held = null; return 'drop'; }
+    if (walkable(s, Math.floor(p.x), Math.floor(p.y))) { held.at = { floor: pushOut(s, p.x, p.y, held.id) }; p.held = null; return 'drop'; }
     return null;
   }
   function grabAt(s, p, fc) {
@@ -364,6 +368,7 @@
       var on = t.holds ? s.items[t.holds] : null;
       if (!on) {
         if (ch === 'B' && !isIng(held)) return null;           // 砧板只放食材
+        if (ch === 'D' && !(isPlate(held) && !held.dirty && !held.contents.length)) return null;   // 晾盤架只放乾淨空盤
         t.holds = held.id; held.at = { tile: fk }; p.held = null; return 'place';
       }
       return combine(s, p, held, on, t);
@@ -531,7 +536,7 @@
             s.events.push({ t: 'bounce' });
             continue;
           }
-          it.at = { floor: pushOut(s, a.x, a.y), slide: { vx: a.vx * 0.5, vy: a.vy * 0.5 } };   // 開始滑（先推離牆角）
+          it.at = { floor: pushOut(s, a.x, a.y, it.id), slide: { vx: a.vx * 0.5, vy: a.vy * 0.5 } };   // 開始滑（先推離牆角）
           break;
         }
         // 碰到工作台或檯面
@@ -543,7 +548,10 @@
         // 2) 牆擋不住的檯面類都可以越過：後面不是牆、而且飛得比它高 → 繼續飛
         if (a.h > (ch === '#' ? CFG.wallH : tileTop(ch)) && landsBeyond(s, a.x, a.y, a.vx / Math.hypot(a.vx, a.vy), a.vy / Math.hypot(a.vx, a.vy))) continue;
         // 3) 後面是牆（或飛太低）：空的就落在上面，不然彈回來
-        if (t && 'holds' in t && !t.holds) { t.holds = it.id; it.at = { tile: ck }; break; }
+        if (t && 'holds' in t && !t.holds && cellAt(s, cx, cy) !== 'D') { t.holds = it.id; it.at = { tile: ck }; break; }
+        // 這格已經有東西：滑到旁邊空的檯面（不會兩個疊在同一格）
+        var side = t && 'holds' in t ? freeNeighborHolder(s, cx, cy, a.x, a.y) : null;   // 只有撞到「有東西的檯面」才換格；撞牆照樣彈回
+        if (side) { s.tiles[side].holds = it.id; it.at = { tile: side }; break; }
         // 牆或放不下：彈回來、繼續往下掉
         a.x = px; a.y = py; a.vx *= -0.3; a.vy *= -0.3;
         if (a.vh > 0) a.vh = 0;
@@ -567,16 +575,38 @@
     var f = it.at.floor, v = it.at.slide, sp = Math.hypot(v.vx, v.vy);
     if (sp < 0.05) { delete it.at.slide; return; }
     var nx = f[0] + v.vx * dt, ny = f[1] + v.vy * dt;
-    if (walkable(s, Math.floor(nx), Math.floor(ny))) { var q = pushOut(s, nx, ny); f[0] = q[0]; f[1] = q[1]; }
+    if (walkable(s, Math.floor(nx), Math.floor(ny))) { var q = pushOut(s, nx, ny, it.id); f[0] = q[0]; f[1] = q[1]; }
     else { delete it.at.slide; return; }                       // 碰到檯面或牆就停
     var dec = Math.max(0, sp - CFG.slideFriction * dt) / sp;
     v.vx *= dec; v.vy *= dec;
     if (dec === 0) delete it.at.slide;
   }
+  // 旁邊（上下左右＋斜角）最近的空檯面，能放食材的才算（晾盤架、砧板以外）
+  function freeNeighborHolder(s, cx, cy, x, y) {
+    var best = null, bd = 9;
+    for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      var nx = cx + dx, ny = cy + dy, k = key(nx, ny), t = s.tiles[k], ch = cellAt(s, nx, ny);
+      if (!t || !('holds' in t) || t.holds || ch === 'D' || ch === 'S') continue;
+      var d = Math.hypot(nx + 0.5 - x, ny + 0.5 - y) + (dx && dy ? 0.3 : 0);
+      if (d < bd) { bd = d; best = k; }
+    }
+    return best;
+  }
   // 把地上的東西推離旁邊不能走的格子，至少保持 itemRadius（像角色一樣），角落也推得出來
-  function pushOut(s, x, y) {
+  function pushOut(s, x, y, selfId) {
     var r = CFG.itemRadius;
     for (var k = 0; k < 3; k++) {
+      for (var oid in s.items) {                         // 跟其他地上的東西保持距離
+        if (oid === selfId) continue;
+        var of = s.items[oid].at.floor;
+        if (!of) continue;
+        var ox = x - of[0], oy = y - of[1], od = Math.hypot(ox, oy), need = r * 1.8;
+        if (od >= need) continue;
+        if (od < 1e-6) { ox = 1; oy = 0; od = 1; }
+        var nx2 = x + ox / od * (need - od), ny2 = y + oy / od * (need - od);
+        if (walkable(s, Math.floor(nx2), Math.floor(ny2))) { x = nx2; y = ny2; }
+      }
       for (var yy = Math.floor(y - r); yy <= Math.floor(y + r); yy++) {
         for (var xx = Math.floor(x - r); xx <= Math.floor(x + r); xx++) {
           if (walkable(s, xx, yy)) continue;

@@ -8,7 +8,7 @@
   --accent: #C8432C; --accent-ink: #FFFFFF; --gold: #F2B544; --ok: #2F7D52; --warn: #8A5A00; --err: #B0301C;
   --err-bg: #FBE7E3; --warn-bg: #FCF1D9; --ok-bg: #E2F2E8;
   --t-floor: #E6DAC3; --t-grout: #D3C4A8; --t-wall: #5E4632; --t-void: #A9B8C4; --t-counter: #B98A5E;
-  --t-crate: #8F6A43; --t-board: #E9D7B4; --t-stove: #48525F; --t-sink: #8DB5D6; --t-plate: #F7F3EA;
+  --t-crate: #8F6A43; --t-board: #E9D7B4; --t-stove: #48525F; --t-sink: #8DB5D6; --t-dry: #C6D6E2; --t-plate: #F7F3EA;
   --t-return: #9C8E7A; --t-serve: #F2B544; --t-trash: #6B7684; --t-belt: #3D6E8F; --t-mover: #3F8F7A; --t-window: #B9772E;
   --display: 'Baloo 2', 'Noto Sans TC', system-ui, sans-serif;
   --body: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
@@ -185,7 +185,7 @@ var BUILTIN = /*LEVELS_JSON*/;
   var PLAYER_COLORS = ['#C8432C', '#3B82C4', '#3FA36B', '#D9952B', '#9B6BD1', '#E77FA6', '#E8873A', '#2E9C9C'];
   var TILE_STYLE = {
     '.': ['--t-floor', ''], '#': ['--t-wall', ''], ' ': ['--t-void', ''], 'C': ['--t-counter', ''],
-    'I': ['--t-crate', '箱'], 'B': ['--t-board', '砧'], 'S': ['--t-stove', '爐'], 'K': ['--t-sink', '水'],
+    'I': ['--t-crate', '箱'], 'B': ['--t-board', '砧'], 'S': ['--t-stove', '爐'], 'K': ['--t-sink', '水'], 'D': ['--t-dry', '晾'],
     'P': ['--t-plate', '盤'], 'R': ['--t-return', '回'], 'O': ['--t-serve', '出'], 'T': ['--t-trash', '垃'],
     'V': ['--t-belt', ''], 'M': ['--t-mover', '動'], 'W': ['--t-window', '窗']
   };
@@ -194,7 +194,7 @@ var BUILTIN = /*LEVELS_JSON*/;
   var ING_SHORT = { tomato: '番', lettuce: '生', onion: '洋', mushroom: '蘑', noodle: '麵' };
   var TOOLS = [
     { id: '.', name: '地板' }, { id: '#', name: '牆' }, { id: ' ', name: '空地' }, { id: 'C', name: '檯面' },
-    { id: 'I', name: '食材箱' }, { id: 'B', name: '砧板' }, { id: 'S', name: '爐' }, { id: 'K', name: '水槽' },
+    { id: 'I', name: '食材箱' }, { id: 'B', name: '砧板' }, { id: 'S', name: '爐' }, { id: 'K', name: '水槽' }, { id: 'D', name: '晾盤架' },
     { id: 'P', name: '盤架' }, { id: 'R', name: '回收口' }, { id: 'O', name: '出餐口' }, { id: 'T', name: '垃圾桶' },
     { id: 'V', name: '輸送帶' }, { id: 'M', name: '移動檯面' }, { id: 'W', name: '定時窗口' },
     { id: 'spawn', name: '出生點' }, { id: 'pick', name: '選取' }
@@ -204,7 +204,7 @@ var BUILTIN = /*LEVELS_JSON*/;
     '#': '牆：擋人也擋丟出的東西。可以設定「人少時變地板」當成門。',
     ' ': '空地：不能走，但可以隔著丟東西（最遠 4 格）。移動檯面要走在空地上。',
     'C': '檯面：放東西用。兩區中間的檯面就是傳菜口。',
-    'I': '食材箱：先在下面選食材再點。', 'B': '砧板：切食材。', 'S': '爐：附一個鍋。', 'K': '水槽：洗髒盤。',
+    'I': '食材箱：先在下面選食材再點。', 'B': '砧板：切食材。', 'S': '爐：開局放一個鍋；只有鍋子放上去才會煮。', 'K': '水槽：洗髒盤。旁邊放一格晾盤架。', 'D': '晾盤架：放在水槽隔壁，洗好的盤子會疊在這裡。只能放乾淨的空盤。',
     'P': '盤架：乾淨盤子從這裡拿。', 'R': '髒盤回收口：出餐後盤子從這裡回來。', 'O': '出餐口：把裝好的菜放上去就出餐。',
     'T': '垃圾桶：丟掉食材或燒焦的東西。',
     'V': '輸送帶：放上去的東西會往箭頭方向走。拖曳可以畫一整條。',

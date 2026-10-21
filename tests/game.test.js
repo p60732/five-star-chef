@@ -805,17 +805,6 @@ t('檯面後面是牆：丟出的東西落在檯面上', () => {
   assert.strictEqual(s.items[s.tiles['3,1'].holds].name, 'tomato');
 });
 
-t('檯面後面是牆、檯面上已經有東西：彈回來掉在地上', () => {
-  let s = newGame('tomato_soup');
-  s.items['x5'] = { id: 'x5', kind: 'ing', name: 'lettuce', state: 'raw', chop: 0, at: { tile: '3,1' } };
-  s.tiles['3,1'].holds = 'x5'; s.stats.spawned = 1;
-  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
-  s = at(s, 3, 4, 'N'); s = press(s, 'throw');
-  s = wait(s, 1.5);
-  const tomato = Object.values(s.items).find((i) => i.name === 'tomato');
-  assert.ok(tomato.at.floor, '番茄在地上');
-});
-
 t('地上的盤子：可以把切好的放上去、可以疊、可以撿起來', () => {
   let s = newGame('salad');
   s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子
@@ -855,6 +844,36 @@ t('滑進牆角：停下來時跟牆、檯面保持距離，不會卡進角落',
   s = wait(s, 1);
   const [x, y] = s.items['x1'].at.floor, r = Game.CFG.itemRadius - 0.01;
   assert.ok(x <= 10 - r && y <= 7 - r, '離牆角夠遠：' + x.toFixed(2) + ',' + y.toFixed(2));
+});
+
+t('丟到已經有東西的檯面：滑到旁邊空的檯面，不會疊在同一格', () => {
+  let s = newGame('tomato_soup');
+  s.items['x5'] = { id: 'x5', kind: 'ing', name: 'lettuce', state: 'raw', chop: 0, at: { tile: '3,1' } };
+  s.tiles['3,1'].holds = 'x5'; s.stats.spawned = 1;
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 3, 4, 'N'); s = press(s, 'throw');               // (3,1) 有生菜，後面是外牆
+  s = wait(s, 1.5);
+  const tomato = Object.values(s.items).find((i) => i.name === 'tomato');
+  assert.ok(tomato.at.tile && tomato.at.tile !== '3,1', '落到旁邊的檯面：' + JSON.stringify(tomato.at));
+  assert.strictEqual(s.tiles['3,1'].holds, 'x5');
+});
+
+t('地上的東西不會疊在同一點', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [5.5, 4.5] } };
+  s.items['x2'] = { id: 'x2', kind: 'ing', name: 'lettuce', state: 'raw', chop: 0, at: { floor: [4.0, 4.5], slide: { vx: 5, vy: 0 } } };
+  s.stats.spawned = 2;
+  s = wait(s, 1);
+  const a = s.items['x1'].at.floor, b = s.items['x2'].at.floor;
+  assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1]) >= Game.CFG.itemRadius * 1.7, '分開：' + a + ' / ' + b);
+});
+
+t('晾盤架只放乾淨的空盤', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'act');                 // 番茄
+  s = at(s, 8, 4, 'E'); s = press(s, 'act');                 // (9,4) 晾盤架放不了番茄
+  assert.ok(held(s) && held(s).name === 'tomato');
+  assert.ok(!s.tiles['9,4'].holds);
 });
 
 // 突變：守恆檢查真的會抓到錯

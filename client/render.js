@@ -151,11 +151,15 @@
         if (ch === '.') continue;
         if (ch === '#') { g = box(1, WALL_H, 1, COL.wall, 0.02); g.position.set(cx, WALL_H / 2, cz); world.add(g); var cap = box(1, 0.04, 1, COL.wallTop, false); cap.position.set(cx, WALL_H + 0.02, cz); world.add(cap); continue; }
         // 所有工作台先有一個檯面座
-        var baseCol = { V: COL.belt, M: COL.mover, W: COL.window, S: COL.stove, T: COL.trash, I: COL.crate, K: COL.counter, O: COL.serve }[ch] || COL.counter;
+        var baseCol = { V: COL.belt, M: COL.mover, W: COL.window, S: COL.stove, T: COL.trash, I: COL.crate, K: COL.counter, O: COL.serve, D: 0x9FB6C8 }[ch] || COL.counter;
         if (ch === 'T') { g = cyl(0.4, CH, COL.trash, 0.05); g.position.set(cx, CH / 2, cz); world.add(g); var lid = cyl(0.3, 0.03, 0x2B3440, false); lid.position.set(cx, CH + 0.02, cz); world.add(lid); continue; }
         g = box(0.98, CH, 0.98, baseCol, 0.03); g.position.set(cx, CH / 2, cz); world.add(g);
         var top = null;
         if (ch === 'C' || ch === 'P') { top = box(1, 0.06, 1, COL.counterTop, false); }
+        if (ch === 'D') {                                     // 晾盤架：水槽色底座＋直立的鐵架
+          top = box(1, 0.05, 1, 0xCFE0EC, false);
+          for (var rb = 0; rb < 4; rb++) { var bar = box(0.04, 0.22, 0.7, 0x8A99A8, false); bar.position.set(-0.33 + rb * 0.22, 0.12, 0); top.add(bar); }
+        }
         if (ch === 'R') {                                     // 回收口：上面是凹下去的出口，不能放東西
           top = box(1, 0.06, 1, 0x5E4632, false);
           var slot = box(0.78, 0.03, 0.78, 0x2B2018, false); slot.position.y = 0.03; top.add(slot);

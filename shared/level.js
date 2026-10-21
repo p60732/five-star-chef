@@ -15,6 +15,7 @@
     'B': { name: '砧板', station: true, hold: true },
     'S': { name: '爐（附鍋）', station: true },
     'K': { name: '水槽', station: true },
+    'D': { name: '晾盤架（水槽旁，洗好的盤子放這裡）', station: true, hold: true },
     'P': { name: '盤架', station: true },
     'R': { name: '髒盤回收口', station: true },
     'O': { name: '出餐口', station: true },
