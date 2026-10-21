@@ -31,6 +31,7 @@
     bounce: 0.25,          // 落地反彈係數
     slideFriction: 9,      // 落地後滑行減速（格/秒²）
     lowWallH: 0.35,        // 矮牆高度：丟出的東西比這高就飛過去
+    counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
     patience: { salad: 50, tomato_soup: 70, onion_soup: 70, mushroom_soup: 70, tomato_noodle: 80 },
@@ -427,7 +428,6 @@
           else { it.at = { hand: catcher.id }; catcher.held = it.id; }
           s.events.push({ t: 'catch', pid: catcher.id }); break;
         }
-        if (ch === 'L' && a.h > CFG.lowWallH) continue;              // 矮牆：飛得夠高就越過去
         if (ch === '.' || ch === ' ') {
           if (a.h > 0) continue;
           if (ch === ' ') { land(s, it, a.x, a.y, px, py); break; }      // 掉進空地：放回最近的地板
@@ -440,20 +440,30 @@
           it.at = { floor: [a.x, a.y], slide: { vx: a.vx * 0.5, vy: a.vy * 0.5 } };   // 開始滑
           break;
         }
-        // 撞到格子
-        var t = s.tiles[ck];
-        if (t && t.holds && isPot(s.items[t.holds]) && potAccepts(s.items[t.holds], it)) { putInPot(s, s.items[t.holds], it); s.events.push({ t: 'potIn' }); break; }
+        // 碰到工作台或檯面
+        var t = s.tiles[ck], on = t && t.holds ? s.items[t.holds] : null;
+        // 1) 會「收」東西的一定收：垃圾桶、鍋子、盤子
         if (ch === 'T') { removeItem(s, it.id); s.stats.trashed++; break; }
+        if (isPot(on) && potAccepts(on, it)) { putInPot(s, on, it); s.events.push({ t: 'potIn' }); break; }
+        if (isPlate(on) && plateCanTake(s, on, ingTag(it))) { on.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break; }
+        // 2) 牆擋不住的檯面類都可以越過：後面不是牆、而且飛得比它高 → 繼續飛
+        if (ch !== '#' && a.h > tileTop(ch) && !wallBehind(s, cx, cy, a)) continue;
+        // 3) 後面是牆（或飛太低）：空的就落在上面，不然彈回來
         if (t && 'holds' in t && !t.holds) { t.holds = it.id; it.at = { tile: ck }; break; }
-        if (t && t.holds && isPlate(s.items[t.holds]) && plateCanTake(s, s.items[t.holds], ingTag(it))) {   // 落進檯面上的盤子
-          s.items[t.holds].contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break;
-        }
         // 牆或放不下：彈回來、繼續往下掉
         a.x = px; a.y = py; a.vx *= -0.3; a.vy *= -0.3;
         if (a.vh > 0) a.vh = 0;
         s.events.push({ t: 'bonk' });
       }
     }
+  }
+  // 各種格子的高度（丟出的東西比這高才能越過）
+  function tileTop(ch) { return ch === 'L' ? CFG.lowWallH : CFG.counterH; }
+  // 沿著飛行方向，這一格後面那一格是不是牆（或地圖外）
+  function wallBehind(s, cx, cy, a) {
+    var bx = cx, by = cy;
+    if (Math.abs(a.vx) >= Math.abs(a.vy)) bx += a.vx >= 0 ? 1 : -1; else by += a.vy >= 0 ? 1 : -1;
+    return cellAt(s, bx, by) === '#';
   }
   function slideItem(s, it, dt) {
     var f = it.at.floor, v = it.at.slide, sp = Math.hypot(v.vx, v.vy);

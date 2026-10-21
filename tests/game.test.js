@@ -721,6 +721,36 @@ t('矮牆可以放東西，兩邊都拿得到', () => {
   assert.strictEqual(held(s).name, 'onion');
 });
 
+t('越過檯面：檯面後面不是牆，丟出的東西飛過去落到另一邊', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 4, 3, 'E'); s = press(s, 'throw');               // (6,3) 是中間的傳菜檯面，後面 (7,3) 是地板
+  s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor && it.at.floor[0] > 7, '越過檯面到右邊');
+  assert.ok(!s.tiles['6,3'].holds);
+});
+
+t('檯面後面是牆：丟出的東西落在檯面上', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 3, 4, 'N'); s = press(s, 'throw');               // (3,1) 檯面，後面 (3,0) 是牆
+  s = wait(s, 1.5);
+  assert.ok(s.tiles['3,1'].holds, '落在檯面上');
+  assert.strictEqual(s.items[s.tiles['3,1'].holds].name, 'tomato');
+});
+
+t('檯面後面是牆、檯面上已經有東西：彈回來掉在地上', () => {
+  let s = newGame('tomato_soup');
+  s.items['x5'] = { id: 'x5', kind: 'ing', name: 'lettuce', state: 'raw', chop: 0, at: { tile: '3,1' } };
+  s.tiles['3,1'].holds = 'x5'; s.stats.spawned = 1;
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 3, 4, 'N'); s = press(s, 'throw');
+  s = wait(s, 1.5);
+  const tomato = Object.values(s.items).find((i) => i.name === 'tomato');
+  assert.ok(tomato.at.floor, '番茄在地上');
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;
