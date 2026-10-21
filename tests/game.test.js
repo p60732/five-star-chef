@@ -649,16 +649,24 @@ t('鍋子離開爐子就不會煮也不會焦，放回去接著煮', () => {
   assert.ok(Game.potReady(s.items[pid]));
 });
 
-t('爐子只能放鍋，鍋子不能放砧板', () => {
+t('爐子等同平台：盤子、食材都能放上去，但只有鍋子會煮', () => {
   let s = newGame('tomato_soup');
-  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿起鍋，爐子空了
-  s = at(s, 4, 2, 'N'); s = press(s, 'act');                 // 砧板放不了鍋
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿起鍋，爐子 (7,1) 空了
+  s = at(s, 4, 2, 'N'); s = press(s, 'act');                 // 鍋子不能放砧板
   assert.strictEqual(held(s).kind, 'pot');
-  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 鍋子先放檯面，爐子 (7,1) 空著
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 鍋子先放檯面
+  s = at(s, 1, 2, 'N'); s = press(s, 'act');                 // 拿生番茄
+  s = at(s, 7, 2, 'N'); s.players[0].fx = 0; s = press(s, 'act');   // 放上空爐子
+  const it = s.items[s.tiles['7,1'].holds];
+  assert.ok(it && it.kind === 'ing', '番茄放在爐子上');
+  s = wait(s, 20);
+  assert.strictEqual(it.state, 'raw'); assert.strictEqual(s.items[it.id].state, 'raw', '不會被煮');
+  s = press(s, 'act');                                       // 拿回來
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 放不上盤架（拿著食材）→ 換個方式：丟垃圾桶
+  s = at(s, 9, 6, 'S'); s = press(s, 'act');
   s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子
-  s = at(s, 7, 2, 'N'); s.players[0].fx = 0; s = press(s, 'act');   // 盤子不能放上空爐子
-  assert.strictEqual(held(s).kind, 'plate');
-  assert.ok(!s.tiles['7,1'].holds);
+  s = at(s, 7, 2, 'N'); s.players[0].fx = 0; s = press(s, 'act');   // 盤子也能放上爐子
+  assert.strictEqual(s.items[s.tiles['7,1'].holds].kind, 'plate');
 });
 
 t('鍋子不能丟', () => {

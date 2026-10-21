@@ -72,7 +72,7 @@
         var ch = row[x], k = key(x, y);
         if (HOLD_TILES[ch]) tiles[k] = { holds: null };
         if (ch === 'B') tiles[k] = { holds: null };
-        if (ch === 'S') { tiles[k] = { holds: null }; stoves.push(k); }   // 爐子只能放鍋
+        if (ch === 'S') { tiles[k] = { holds: null }; stoves.push(k); }   // 爐子＝平台，什麼都能放；只有鍋子放上去才會煮
         if (ch === 'P') { tiles[k] = { clean: 0 }; if (!firstRack) firstRack = k; }
         if (ch === 'R') { tiles[k] = { dirty: 0 }; returns.push(k); }
         if (ch === 'K') tiles[k] = { dirty: 0, wash: 0, clean: 0 };   // clean：洗好、放在水槽旁的盤子
@@ -342,7 +342,6 @@
       var on = t.holds ? s.items[t.holds] : null;
       if (!on) {
         if (ch === 'B' && !isIng(held)) return null;           // 砧板只放食材
-        if (ch === 'S' && !isPot(held)) return null;           // 爐子只放鍋
         t.holds = held.id; held.at = { tile: fk }; p.held = null; return 'place';
       }
       return combine(s, p, held, on, t);
