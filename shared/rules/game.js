@@ -76,6 +76,17 @@
       }
     });
     if (firstRack) tiles[firstRack].clean = level.plates || CFG.plates;
+    // 每個水槽找一格相鄰的檯面當「晾盤位」：洗好的盤子直接疊在那裡
+    cells.forEach(function (row, y) {
+      for (var x = 0; x < row.length; x++) {
+        if (row[x] !== 'K') continue;
+        var order = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (var i = 0; i < order.length; i++) {
+          var nx = x + order[i][0], ny = y + order[i][1];
+          if (ny >= 0 && ny < cells.length && nx >= 0 && nx < row.length && cells[ny][nx] === 'C') { tiles[key(x, y)].dry = key(nx, ny); break; }
+        }
+      }
+    });
     var players = r.spawns.map(function (s, i) {
       return { id: i, x: s[0] + 0.5, y: s[1] + 0.5, fx: 0, fy: -1, held: null, busy: null };
     });
@@ -117,13 +128,18 @@
   function removeItem(s, id) { delete s.items[id]; }
   function isPlate(it) { return it && it.kind === 'plate'; }
   function isIng(it) { return it && it.kind === 'ing'; }
+  function pn(it) { return it.n || 1; }                      // 一疊盤子有幾個
+  // 空盤可以疊：都沒裝東西、乾淨／髒一致
+  function stackable(a, b) {
+    return isPlate(a) && isPlate(b) && !a.contents.length && !b.contents.length && !!a.dirty === !!b.dirty;
+  }
 
   // 這個盤子加上 add 之後，還有沒有可能湊成本關的某道菜
   // 盤子能不能再放 add：
   // (1) 湊得成本關某道菜的一部分（沙拉、湯、麵）；或
   // (2) 當托盤：裝同一種切好的湯料，最多 soupSize 份，之後整盤倒進鍋。
   function plateCanTake(s, plate, add) {
-    if (plate.dirty) return false;
+    if (plate.dirty || pn(plate) > 1) return false;
     if (trayOk(plate, add)) return true;
     if (plate.contents.indexOf(add) >= 0) return false;
     var next = plate.contents.concat([add]);
@@ -260,14 +276,26 @@
     var held = p.held ? s.items[p.held] : null;
 
     if (!held) {
-      if (t && t.holds) { var it = s.items[t.holds]; t.holds = null; it.at = { hand: p.id }; p.held = it.id; return 'pick'; }
+      if (t && t.holds) {
+        var it = s.items[t.holds];
+        if (isPlate(it) && !it.dirty && pn(it) > 1) {            // 乾淨的一疊：拿一個
+          it.n = pn(it) - 1;
+          p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], n: 1, at: { hand: p.id } }).id; return 'plate';
+        }
+        t.holds = null; it.at = { hand: p.id }; p.held = it.id;   // 其他（含髒盤整疊）：整個拿起
+        return isPlate(it) && it.dirty && pn(it) > 1 ? 'dirtyStack' : 'pick';
+      }
       if (ch === 'I' && t.item) {
         var ni = newItem(s, { kind: 'ing', name: t.item, state: 'raw', chop: 0, at: { hand: p.id } });
         p.held = ni.id; s.stats.spawned++; return 'crate';
       }
       if (ch === 'P' && t.clean > 0) { t.clean--; p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], at: { hand: p.id } }).id; return 'plate'; }
       if (ch === 'K' && t.clean > 0 && t.dirty === 0) { t.clean--; p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], at: { hand: p.id } }).id; return 'plate'; }
-      if (ch === 'R' && t.dirty > 0) { t.dirty--; p.held = newItem(s, { kind: 'plate', dirty: true, contents: [], at: { hand: p.id } }).id; return 'dirty'; }
+      if (ch === 'R' && t.dirty > 0) {                          // 髒盤整疊拿走
+        var cnt = t.dirty; t.dirty = 0;
+        p.held = newItem(s, { kind: 'plate', dirty: true, contents: [], n: cnt, at: { hand: p.id } }).id;
+        return cnt > 1 ? 'dirtyStack' : 'dirty';
+      }
       return null;
     }
 
@@ -278,6 +306,7 @@
         if (ch === 'B' && !isIng(held)) return null;           // 砧板只放食材
         t.holds = held.id; held.at = { tile: fk }; p.held = null; return 'place';
       }
+      if (stackable(on, held)) { on.n = pn(on) + pn(held); removeItem(s, held.id); p.held = null; return 'stack'; }
       if (isPlate(on) && isIng(held) && plateCanTake(s, on, ingTag(held))) {
         on.contents.push(ingTag(held)); removeItem(s, held.id); p.held = null; s.stats.merged++; return 'toPlate';
       }
@@ -307,8 +336,8 @@
       if (isPlate(held) && held.contents.length) { held.contents = []; return 'trashPlate'; }
       return null;
     }
-    if (ch === 'K' && isPlate(held) && held.dirty) { t.dirty++; removeItem(s, held.id); p.held = null; return 'toSink'; }
-    if (ch === 'P' && isPlate(held) && !held.dirty && !held.contents.length) { t.clean++; removeItem(s, held.id); p.held = null; return 'toRack'; }
+    if (ch === 'K' && isPlate(held) && held.dirty) { t.dirty += pn(held); removeItem(s, held.id); p.held = null; return 'toSink'; }
+    if (ch === 'P' && isPlate(held) && !held.dirty && !held.contents.length) { t.clean += pn(held); removeItem(s, held.id); p.held = null; return 'toRack'; }
     return null;
   }
 
@@ -421,6 +450,13 @@
     p.busy = { kind: kind, x: c[0], y: c[1] };
     return kind;
   }
+  // 洗好的盤子：疊到水槽旁的晾盤位；那格被別的東西佔住才留在水槽邊
+  function putWashed(s, sink) {
+    var d = sink.dry ? s.tiles[sink.dry] : null;
+    if (d && !d.holds) { d.holds = newItem(s, { kind: 'plate', dirty: false, contents: [], n: 1, at: { tile: sink.dry } }).id; return; }
+    if (d && d.holds && stackable(s.items[d.holds], { kind: 'plate', dirty: false, contents: [] })) { s.items[d.holds].n = pn(s.items[d.holds]) + 1; return; }
+    sink.clean++;
+  }
   function workBusy(s, p, dt) {
     var b = p.busy, c = [b.x, b.y], t = s.tiles[key(b.x, b.y)];
     if (!useOk(s, p, c)) { p.busy = null; return; }
@@ -431,7 +467,7 @@
     } else {
       t.wash += dt / CFG.washSec;
       if (t.wash >= 1) {
-        t.wash = 0; t.dirty--; t.clean++; s.events.push({ t: 'washed', pid: p.id });
+        t.wash = 0; t.dirty--; putWashed(s, t); s.events.push({ t: 'washed', pid: p.id });
         if (t.dirty <= 0) p.busy = null;                  // 有好幾個髒盤就接著洗
       }
     }
@@ -539,7 +575,7 @@
   // ── 守恆檢查（測試與 debug 用）──
   function plateCount(s) {
     var n = s.pendingReturn.length;
-    for (var id in s.items) if (isPlate(s.items[id])) n++;
+    for (var id in s.items) if (isPlate(s.items[id])) n += pn(s.items[id]);
     for (var k in s.tiles) { var t = s.tiles[k]; n += (t.clean || 0) + (t.dirty || 0); }
     return n;
   }
@@ -571,8 +607,8 @@
   function itemLabel(it) {
     if (!it) return '';
     if (isPlate(it)) {
-      if (it.dirty) return '髒盤子';
-      if (!it.contents.length) return '空盤子';
+      if (it.dirty) return pn(it) > 1 ? '髒盤子 ×' + pn(it) : '髒盤子';
+      if (!it.contents.length) return pn(it) > 1 ? '一疊盤子 ×' + pn(it) : '空盤子';
       if (isTray(it)) return '盤子（' + contentLabel(it.contents[0]) + ' ×' + it.contents.length + '）';
       return '盤子（' + it.contents.map(contentLabel).join('＋') + '）';
     }
@@ -611,7 +647,7 @@
     var test = clone(s), r = grab(test, test.players[pid]);
     var GRAB = { pick: '拿起', crate: '拿' + (t && t.item ? NAMES[t.item] : ''), plate: '拿盤子', dirty: '拿髒盤', pickFloor: '撿起來',
       place: '放下', toPlate: '裝盤', toPot: '放進鍋', fromPot: '盛到盤子', serve: '出餐', trash: '丟掉', trashPlate: '倒掉盤裡的菜',
-      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋' };
+      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走' };
     out.grab = r ? GRAB[r] : '';
     if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
     out.use = '';

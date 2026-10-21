@@ -75,8 +75,9 @@ t('閉環：番茄湯 拿→切→下鍋 ×3→煮→裝盤→出餐→髒盤回
   assert.ok(held(s).dirty);
   s = at(s, 8, 3, 'E'); s = press(s, 'grab');                // 放水槽
   s = holdUse(s, Game.CFG.washSec + 0.1);                    // 洗
-  assert.strictEqual(s.tiles['9,3'].clean, 1, '洗好的盤子放在水槽旁');
-  s = press(s, 'grab');                                      // 從水槽旁拿乾淨盤子
+  const dry = s.items[s.tiles['9,4'].holds];
+  assert.ok(dry && dry.kind === 'plate' && !dry.dirty, '洗好的盤子出現在水槽旁的檯面 (9,4)');
+  s = at(s, 8, 4, 'E'); s = press(s, 'grab');                // 從旁邊檯面拿乾淨盤子
   assert.ok(held(s) && held(s).kind === 'plate' && !held(s).dirty);
   s = at(s, 1, 6, 'S'); s = press(s, 'grab');                // 放回盤架
   assert.strictEqual(s.tiles['1,7'].clean, platesStart, '盤子回到原點');
@@ -265,7 +266,8 @@ t('洗碗：按一下會把水槽裡的盤子一個接一個洗完', () => {
   s.tiles['9,3'].dirty = 2; s.tiles['1,7'].clean -= 2;      // 測試用：兩個髒盤放進水槽
   s = at(s, 8, 3, 'E'); s = press(s, 'use');
   s = wait(s, Game.CFG.washSec * 2 + 0.2);
-  assert.strictEqual(s.tiles['9,3'].dirty, 0); assert.strictEqual(s.tiles['9,3'].clean, 2);
+  assert.strictEqual(s.tiles['9,3'].dirty, 0);
+  assert.strictEqual(s.items[s.tiles['9,4'].holds].n, 2, '兩個洗好的盤子疊在 (9,4)');
 });
 
 t('對準：沒有正對著也能拿到斜前方的生菜箱', () => {
@@ -332,10 +334,9 @@ t('一顆鍵：空手對水槽 → 洗；拿著髒盤對水槽 → 放進去', (
   assert.strictEqual(s.tiles['9,3'].dirty, 1);
   s = press(s, 'act');                                       // 空手再按 → 洗
   s = wait(s, Game.CFG.washSec + 0.1);
-  assert.strictEqual(s.tiles['9,3'].clean, 1, '洗好的盤子在水槽旁');
-  assert.strictEqual(Game.describe(s, 0).act, '拿盤子');
-  s = press(s, 'act');
-  assert.ok(held(s) && !held(s).dirty);
+  assert.ok(s.tiles['9,4'].holds, '洗好的盤子在水槽旁的檯面');
+  s = at(s, 8, 4, 'E'); s = press(s, 'act');
+  assert.ok(held(s) && held(s).kind === 'plate' && !held(s).dirty);
 });
 
 t('一顆鍵：番茄湯完整閉環只用移動、主按鍵', () => {
@@ -485,6 +486,55 @@ t('食材箱：上面空的就能拿出食材', () => {
   let s = newGame('salad');
   s = at(s, 2, 2, 'N'); assert.strictEqual(Game.describe(s, 0).act, '拿生菜');
   s = press(s, 'act'); assert.strictEqual(held(s).name, 'lettuce');
+});
+
+t('髒盤整疊拿走，放進水槽一次全收', () => {
+  let s = newGame('tomato_soup');
+  s.tiles['2,7'].dirty = 3; s.tiles['1,7'].clean -= 3;
+  s = at(s, 2, 6, 'S');
+  assert.strictEqual(Game.describe(s, 0).act, '整疊拿走');
+  s = press(s, 'act');
+  assert.strictEqual(held(s).n, 3); assert.ok(held(s).dirty);
+  assert.strictEqual(s.tiles['2,7'].dirty, 0);
+  s = at(s, 8, 3, 'E'); s = press(s, 'act');
+  assert.strictEqual(s.tiles['9,3'].dirty, 3);
+  s = press(s, 'act'); s = wait(s, Game.CFG.washSec * 3 + 0.3);
+  assert.strictEqual(s.items[s.tiles['9,4'].holds].n, 3, '三個洗好的疊在旁邊');
+});
+
+t('乾淨的一疊：一次拿一個，可以再疊回去', () => {
+  let s = newGame('tomato_soup');
+  s.tiles['1,7'].clean -= 3;
+  s.items['x1'] = { id: 'x1', kind: 'plate', dirty: false, contents: [], n: 3, at: { tile: '3,1' } };
+  s.tiles['3,1'].holds = 'x1';
+  s = at(s, 3, 2, 'N');
+  assert.strictEqual(Game.describe(s, 0).act, '拿盤子');
+  s = press(s, 'act');
+  assert.strictEqual(held(s).n, 1); assert.strictEqual(s.items['x1'].n, 2);
+  assert.strictEqual(Game.describe(s, 0).act, '疊上去');
+  s = press(s, 'act');
+  assert.strictEqual(s.items['x1'].n, 3); assert.ok(!s.players[0].held);
+});
+
+t('一疊盤子不能直接裝菜（要先拿一個下來）', () => {
+  let s = newGame('salad');
+  s.tiles['1,7'].clean -= 2;
+  s.items['x1'] = { id: 'x1', kind: 'plate', dirty: false, contents: [], n: 2, at: { tile: '3,1' } };
+  s.tiles['3,1'].holds = 'x1';
+  s = chopOne(s, 2, 4);
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');
+  assert.deepStrictEqual(s.items['x1'].contents, []);
+});
+
+t('晾盤位被佔住時，洗好的盤子留在水槽邊，還是拿得到', () => {
+  let s = newGame('tomato_soup');
+  s.items['x9'] = { id: 'x9', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { tile: '9,4' } };
+  s.tiles['9,4'].holds = 'x9'; s.stats.spawned = 1;
+  s.tiles['9,3'].dirty = 1; s.tiles['1,7'].clean -= 1;
+  s = at(s, 8, 3, 'E'); s = press(s, 'act'); s = wait(s, Game.CFG.washSec + 0.1);
+  assert.strictEqual(s.tiles['9,3'].clean, 1);
+  s = press(s, 'act');
+  assert.ok(held(s) && held(s).kind === 'plate');
 });
 
 // 突變：守恆檢查真的會抓到錯

@@ -45,6 +45,32 @@
   function cyl(r, h, color, ol, seg) { return toon(new T.CylinderGeometry(r, r, h, seg || 20), color, ol); }
   function sph(r, color, ol) { return toon(new T.SphereGeometry(r, 16, 12), color, ol); }
 
+  var STICKER_TEXT = { tomato: '番茄', lettuce: '生菜', onion: '洋蔥', mushroom: '蘑菇', noodle: '麵' };
+  var stickerCache = {};
+  function sticker(name) {
+    if (!stickerCache[name]) {
+      var cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
+      var c = cv.getContext('2d'), col = '#' + ((ING[name] || { raw: 0xffffff }).raw).toString(16).padStart(6, '0');
+      c.fillStyle = '#FFF8EC'; c.strokeStyle = '#1A1410'; c.lineWidth = 10;
+      if (c.roundRect) { c.beginPath(); c.roundRect(8, 8, 240, 144, 26); c.fill(); c.stroke(); } else { c.fillRect(8, 8, 240, 144); c.strokeRect(8, 8, 240, 144); }
+      // 食材圖示
+      c.lineWidth = 6; c.fillStyle = col;
+      c.beginPath();
+      if (name === 'noodle') { c.rect(28, 46, 76, 60); }
+      else if (name === 'mushroom') { c.arc(66, 74, 38, Math.PI, 0); c.lineTo(104, 80); c.lineTo(28, 80); }
+      else c.arc(66, 80, 40, 0, Math.PI * 2);
+      c.fill(); c.stroke();
+      if (name === 'tomato') { c.fillStyle = '#3F8F3A'; c.fillRect(58, 32, 16, 14); }
+      if (name === 'mushroom') { c.fillStyle = '#F2E6D0'; c.fillRect(56, 80, 20, 34); c.strokeRect(56, 80, 20, 34); }
+      c.fillStyle = '#1A1410'; c.font = '900 52px "Noto Sans TC", sans-serif'; c.textBaseline = 'middle';
+      c.fillText(STICKER_TEXT[name] || '?', 118, 82);
+      var tex = new T.CanvasTexture(cv); tex.anisotropy = 4;
+      stickerCache[name] = new T.MeshBasicMaterial({ map: tex });
+    }
+    var m = new T.Mesh(new T.PlaneGeometry(0.86, 0.54), stickerCache[name]);
+    return m;
+  }
+
   var CH = 0.55; // 檯面高度（壓低，俯視才看得到出入口）
   var WALL_H = 0.42; // 牆高度（比檯面還矮，只當邊界）
   var ING_SCALE = 1.75, PLATE_SCALE = 1.3; // 食材、盤子放大，遠看也認得出來
@@ -109,16 +135,16 @@
         if (ch === 'K') { top = box(0.8, 0.08, 0.8, COL.sink, 0.04); var w2 = box(0.6, 0.02, 0.6, COL.water, false); w2.position.y = 0.05; top.add(w2); }
         if (ch === 'O') { top = box(1, 0.06, 1, 0xFFD27A, false); var bell = sph(0.14, 0xD9952B, 0.08); bell.position.set(0.3, 0.12, -0.3); top.add(bell); }
         if (ch === 'I') {
-          // 箱子：深色邊框＋淺色蓋子，正面貼一條食材顏色的標籤
-          top = box(0.92, 0.04, 0.92, 0xC9A27A, false);
-          var item = (state.tiles[x + ',' + y] || {}).item, c = ING[item] ? ING[item].raw : 0xffffff;
-          var tag = box(0.6, 0.16, 0.02, c, false); tag.position.set(0, -0.2, 0.47); top.add(tag);
+          // 箱子：上面是平台（可以放東西），正面貼食材貼紙
+          top = box(1, 0.06, 1, COL.counterTop, false);
+          var item = (state.tiles[x + ',' + y] || {}).item;
+          var st = sticker(item); st.position.set(cx, CH * 0.48, cz + 0.5); world.add(st);
         }
         if (ch === 'V') { top = box(1, 0.05, 0.7, 0x2B4A60, false); }
         if (ch === 'W') { top = box(1, 0.06, 1, 0xD49A52, false); }
         if (top) { top.position.set(cx, CH + 0.03, cz); world.add(top); }
         // 會變動的格子內容
-        if ('PRKSI'.indexOf(ch) >= 0) { var dg = new T.Group(); dg.position.set(cx, CH + 0.06, cz); dyn.add(dg); tileDyn[x + ',' + y] = { ch: ch, g: dg, sig: '' }; }
+        if ('PRKS'.indexOf(ch) >= 0) { var dg = new T.Group(); dg.position.set(cx, CH + 0.06, cz); dyn.add(dg); tileDyn[x + ',' + y] = { ch: ch, g: dg, sig: '' }; }
       }
       state.players.forEach(function (p, i) { var m = makePlayer(i); dyn.add(m); playerMeshes.push(m); });
       resize();
@@ -139,7 +165,7 @@
     }
 
     // ── 東西的模型 ──
-    function itemSig(it) { return it.kind === 'plate' ? 'p' + (it.dirty ? 'd' : '') + it.contents.join(',') : it.name + it.state; }
+    function itemSig(it) { return it.kind === 'plate' ? 'p' + (it.dirty ? 'd' : '') + (it.n || 1) + it.contents.join(',') : it.name + it.state; }
     function makeItem(it) {
       var g = makeItemRaw(it);
       g.scale.setScalar(it.kind === 'plate' ? PLATE_SCALE : ING_SCALE);
@@ -148,7 +174,9 @@
     function makeItemRaw(it) {
       var g = new T.Group();
       if (it.kind === 'plate') {
-        var pl = cyl(0.3, 0.05, it.dirty ? COL.dirty : COL.plate, 0.06, 24); g.add(pl);
+        var cnt = Math.min(it.n || 1, 8);
+        for (var k = 0; k < cnt; k++) { var pl = cyl(0.3, 0.05, it.dirty ? COL.dirty : COL.plate, 0.06, 24); pl.position.y = k * 0.07; g.add(pl); }
+        if (cnt > 1) return g;
         it.contents.forEach(function (c, i) {
           var a = c.split(':'), m;
           if (a[0] === 'soup') { m = cyl(0.22, 0.08, SOUP[a[1]], false, 20); m.position.y = 0.06; }
@@ -229,7 +257,6 @@
         if (td.ch === 'P') s2 = 'c' + t.clean;
         if (td.ch === 'R') s2 = 'd' + t.dirty;
         if (td.ch === 'K') s2 = 'd' + t.dirty + 'c' + t.clean;
-        if (td.ch === 'I') s2 = t.holds ? 'covered' : 'open';
         if (td.ch === 'S') s2 = t.pot.contents.join(',') + (t.pot.burnt ? 'B' : '') + (window.Game.potReady(t.pot) ? 'R' : '');
         if (s2 === td.sig) continue;
         td.sig = s2; clearGroup(td.g);
@@ -239,10 +266,6 @@
           for (var q = 0; q < Math.min(t.dirty, 4); q++) { var sp = cyl(0.22, 0.04, COL.dirty, false, 20); sp.position.set(-0.1, 0.04 + q * 0.05, -0.05); sp.rotation.x = 0.3; td.g.add(sp); }
           // 洗好的盤子疊在水槽旁（右前角）
           for (var cq = 0; cq < Math.min(t.clean, 8); cq++) { var cp = cyl(0.2, 0.04, COL.plate, 0.06, 20); cp.position.set(0.24, 0.05 + cq * 0.05, 0.24); td.g.add(cp); }
-        }
-        if (td.ch === 'I' && !t.holds) {
-          // 跟拿在手上的是同一個模型
-          var shown = makeItem({ kind: 'ing', name: t.item, state: 'raw' }); shown.position.y = 0.0; td.g.add(shown);
         }
         if (td.ch === 'S') {
           var pot = t.pot, n = pot.contents.length;

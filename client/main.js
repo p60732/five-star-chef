@@ -83,7 +83,7 @@
       if (e.t === 'burnt') toast('鍋子燒焦了！空手走到鍋子前按「動作」清掉');
       if (e.t === 'order') pulse('orders');
       if (e.t === 'chopped') floatAtPlayer(e.pid, '切好了', '');
-      if (e.t === 'washed') floatAtPlayer(e.pid, '洗好了 盤子在水槽旁', '');
+      if (e.t === 'washed') floatAtPlayer(e.pid, '洗好了', '');
       if (e.t === 'plateBack') pulse('hint');
     });
   }
