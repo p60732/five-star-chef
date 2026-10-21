@@ -743,15 +743,23 @@ t('自動瞄準：直丟沒問題時，就算旁邊有隊友也不轉向', () =>
   assert.strictEqual(s.players[0].fx, 1);
 });
 
-t('自動瞄準：隔著牆的目標不算', () => {
-  let s = Game.createGame(L12, 2, 1);
-  s = JSON.parse(JSON.stringify(s));
-  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'onion', state: 'raw', chop: 0, at: { hand: 0 } };
-  s.players[0].held = 'x1'; s.stats.spawned = 1;
-  Object.assign(s.players[0], { x: 5.5, y: 8.5, fx: 1, fy: 0 });   // 正前方 (6,8) 是牆
-  Object.assign(s.players[1], { x: 8.5, y: 7.5 });          // 隊友在牆後
-  s = Game.step(s, { 0: { throw: true } }, DT);
-  assert.strictEqual(s.players[0].fx, 1, '不應該轉向牆後的隊友');
+t('隔牆：中間的牆丟得過去，落在另一邊', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 4, 2, 'E'); s = press(s, 'throw');               // (6,2) 是中間的牆，後面 (7,2) 是地板
+  s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor && it.at.floor[0] > 7, '越過隔牆，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
+  assert.strictEqual(s.players[0].fx, 1, '直丟就過得去，不用轉向');
+});
+
+t('外牆：一定擋住', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 2, 4, 'W'); s = press(s, 'throw');               // 左邊是外牆
+  s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor && it.at.floor[0] > 1 && it.at.floor[0] < 3);
 });
 
 t('衝刺：朝面向衝出約 2 格，冷卻中不能再衝', () => {

@@ -36,6 +36,7 @@
     dashSec: 0.2,          // 衝刺持續秒數（約 2 格）
     dashCooldown: 0.6,     // 衝刺冷卻
     counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
+    wallH: 0.45,           // 牆高度：中間的隔牆飛得比這高、後面落得到地板就越過去（外牆一定擋）
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
     wrongPenalty: 20,      // 送錯餐扣分（照樣收走，盤子會回來）
@@ -466,22 +467,21 @@
       lastK = k;
       var ch = cellAt(s, cx, cy), t = s.tiles[k], on = t && t.holds ? s.items[t.holds] : null;
       if (ch === '.' || ch === ' ') continue;
-      if (ch === '#') return true;
+      if (ch === '#') { if (landsBeyond(s, cx + 0.5, cy + 0.5, ux, uy)) continue; return true; }
       if (ch === 'T' || (isPot(on) && potAccepts(on, it)) || (isPlate(on) && plateCanTake(s, on, ingTag(it)))) return false;
       if (landsBeyond(s, cx + 0.5, cy + 0.5, ux, uy)) continue;
       return false;                                       // 後面是牆：會落在這個檯面上，也算可以
     }
     return false;
   }
-  // 從這格往 (ux,uy) 越過去，2.5 格內先碰到地板（而不是普通牆）
+  // 從這格往 (ux,uy) 越過去，2.5 格內落得到地板（中間隔牆、檯面都可以越過；外牆後面是地圖外就不行）
   function landsBeyond(s, x0, y0, ux, uy) {
     var sx = Math.floor(x0), sy = Math.floor(y0);
     for (var d = 0.05; d <= 2.5; d += 0.05) {
       var cx = Math.floor(x0 + ux * d), cy = Math.floor(y0 + uy * d);
       if (cx === sx && cy === sy) continue;
-      var ch = cellAt(s, cx, cy);
-      if (ch === '.') return true;
-      if (ch === '#') return false;
+      if (cx < 0 || cy < 0 || cx >= s.w || cy >= s.h) return false;   // 出了地圖（外牆後面）
+      if (cellAt(s, cx, cy) === '.') return true;
     }
     return false;
   }
@@ -492,7 +492,7 @@
     for (var i = 1; i < n; i++) {
       var x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n, cx = Math.floor(x), cy = Math.floor(y);
       if (cx === ex && cy === ey) break;
-      if (cellAt(s, cx, cy) === '#') return false;
+      if (cellAt(s, cx, cy) === '#' && !landsBeyond(s, x, y, (x1 - x0) / d, (y1 - y0) / d)) return false;
     }
     return true;
   }
@@ -540,7 +540,7 @@
         if (isPot(on) && potAccepts(on, it)) { putInPot(s, on, it); s.events.push({ t: 'potIn' }); break; }
         if (isPlate(on) && plateCanTake(s, on, ingTag(it))) { on.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break; }
         // 2) 牆擋不住的檯面類都可以越過：後面不是牆、而且飛得比它高 → 繼續飛
-        if (ch !== '#' && a.h > tileTop(ch) && landsBeyond(s, a.x, a.y, a.vx / Math.hypot(a.vx, a.vy), a.vy / Math.hypot(a.vx, a.vy))) continue;
+        if (a.h > (ch === '#' ? CFG.wallH : tileTop(ch)) && landsBeyond(s, a.x, a.y, a.vx / Math.hypot(a.vx, a.vy), a.vy / Math.hypot(a.vx, a.vy))) continue;
         // 3) 後面是牆（或飛太低）：空的就落在上面，不然彈回來
         if (t && 'holds' in t && !t.holds) { t.holds = it.id; it.at = { tile: ck }; break; }
         // 牆或放不下：彈回來、繼續往下掉
