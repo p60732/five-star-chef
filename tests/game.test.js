@@ -699,16 +699,6 @@ t('鍋子不能丟', () => {
   assert.strictEqual(held(s).kind, 'pot');
 });
 
-t('矮牆：丟出的東西飛過去，落在另一邊的地板', () => {
-  let s = Game.createGame(L12, 1, 1);
-  s = at(s, 2, 2, 'N'); s = press(s, 'act');                 // 拿洋蔥
-  s = at(s, 4, 6, 'E'); s = press(s, 'throw');               // (6,6) 是矮牆
-  s = wait(s, 1.5);
-  const it = firstIng(s);
-  assert.ok(it.at.floor, '應該在地上');
-  assert.ok(it.at.floor[0] > 7, '越過矮牆到右邊，x=' + it.at.floor[0].toFixed(2));
-});
-
 t('自動瞄準：對著牆丟，會自動對準旁邊能越過的檯面', () => {
   let s = Game.createGame(L12, 1, 1);
   s = at(s, 2, 2, 'N'); s = press(s, 'act');
@@ -784,15 +774,6 @@ t('衝刺撞牆會停住，不會穿牆', () => {
   s = at(s, 8, 5, 'E');
   s = go(s, { dash: true }); s = wait(s, 0.4);
   assert.ok(s.players[0].x < 10 - Game.CFG.radius + 0.01, 'x=' + s.players[0].x.toFixed(2));
-});
-
-t('矮牆可以放東西，兩邊都拿得到', () => {
-  let s = Game.createGame(L12, 1, 1);
-  s = at(s, 2, 2, 'N'); s = press(s, 'act');
-  s = at(s, 5, 6, 'E'); s = press(s, 'act');                 // 放上矮牆
-  assert.ok(s.tiles['6,6'].holds, '放在矮牆上');
-  s = at(s, 7, 6, 'W'); s = press(s, 'act');                 // 從另一邊拿
-  assert.strictEqual(held(s).name, 'onion');
 });
 
 t('越過檯面：檯面後面不是牆，丟出的東西飛過去落到另一邊', () => {

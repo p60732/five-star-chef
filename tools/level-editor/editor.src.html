@@ -9,7 +9,7 @@
   --err-bg: #FBE7E3; --warn-bg: #FCF1D9; --ok-bg: #E2F2E8;
   --t-floor: #E6DAC3; --t-grout: #D3C4A8; --t-wall: #5E4632; --t-void: #A9B8C4; --t-counter: #B98A5E;
   --t-crate: #8F6A43; --t-board: #E9D7B4; --t-stove: #48525F; --t-sink: #8DB5D6; --t-plate: #F7F3EA;
-  --t-return: #9C8E7A; --t-serve: #F2B544; --t-trash: #6B7684; --t-belt: #3D6E8F; --t-mover: #3F8F7A; --t-window: #B9772E; --t-low: #A9B6BF;
+  --t-return: #9C8E7A; --t-serve: #F2B544; --t-trash: #6B7684; --t-belt: #3D6E8F; --t-mover: #3F8F7A; --t-window: #B9772E;
   --display: 'Baloo 2', 'Noto Sans TC', system-ui, sans-serif;
   --body: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
 }
@@ -187,7 +187,7 @@ var BUILTIN = /*LEVELS_JSON*/;
     '.': ['--t-floor', ''], '#': ['--t-wall', ''], ' ': ['--t-void', ''], 'C': ['--t-counter', ''],
     'I': ['--t-crate', '箱'], 'B': ['--t-board', '砧'], 'S': ['--t-stove', '爐'], 'K': ['--t-sink', '水'],
     'P': ['--t-plate', '盤'], 'R': ['--t-return', '回'], 'O': ['--t-serve', '出'], 'T': ['--t-trash', '垃'],
-    'V': ['--t-belt', ''], 'M': ['--t-mover', '動'], 'W': ['--t-window', '窗'], 'L': ['--t-low', '矮']
+    'V': ['--t-belt', ''], 'M': ['--t-mover', '動'], 'W': ['--t-window', '窗']
   };
   var LIGHT_TEXT = { '#': 1, 'I': 1, 'S': 1, 'T': 1, 'V': 1, 'M': 1, 'W': 1 };
   var ARROW = { N: '↑', E: '→', S: '↓', W: '←' };
@@ -196,7 +196,7 @@ var BUILTIN = /*LEVELS_JSON*/;
     { id: '.', name: '地板' }, { id: '#', name: '牆' }, { id: ' ', name: '空地' }, { id: 'C', name: '檯面' },
     { id: 'I', name: '食材箱' }, { id: 'B', name: '砧板' }, { id: 'S', name: '爐' }, { id: 'K', name: '水槽' },
     { id: 'P', name: '盤架' }, { id: 'R', name: '回收口' }, { id: 'O', name: '出餐口' }, { id: 'T', name: '垃圾桶' },
-    { id: 'V', name: '輸送帶' }, { id: 'M', name: '移動檯面' }, { id: 'W', name: '定時窗口' }, { id: 'L', name: '矮牆' },
+    { id: 'V', name: '輸送帶' }, { id: 'M', name: '移動檯面' }, { id: 'W', name: '定時窗口' },
     { id: 'spawn', name: '出生點' }, { id: 'pick', name: '選取' }
   ];
   var HINTS = {
@@ -210,7 +210,6 @@ var BUILTIN = /*LEVELS_JSON*/;
     'V': '輸送帶：放上去的東西會往箭頭方向走。拖曳可以畫一整條。',
     'M': '移動檯面：點起點，往設定方向在空地上來回移動。',
     'W': '定時窗口：輪流開關的檯面，關的時候拿不到。',
-    'L': '矮牆：角色走不過去，但可以放東西，丟出的東西飛得夠高就越過去。適合拿來隔開分區又留一條丟東西的路。',
     spawn: '出生點：依編號順序分配給玩家（第 1 人站 1 號）。點地板放下，會自動跳到下一號。',
     pick: '選取：點一格看它的設定，可以在下面改。'
   };

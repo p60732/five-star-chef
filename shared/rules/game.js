@@ -35,7 +35,6 @@
     dashSpeed: 11,         // 衝刺速度（格/秒）
     dashSec: 0.2,          // 衝刺持續秒數（約 2 格）
     dashCooldown: 0.6,     // 衝刺冷卻
-    lowWallH: 0.35,        // 矮牆高度：丟出的東西比這高就飛過去
     counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
@@ -56,7 +55,7 @@
     tomato_noodle: ['noodle:cooked', 'tomato:cut']
   };
   var DIR4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-  var HOLD_TILES = { C: 1, B: 1, V: 1, M: 1, W: 1, L: 1 };   // 能放東西的格子（L＝矮牆）
+  var HOLD_TILES = { C: 1, B: 1, V: 1, M: 1, W: 1 };   // 能放東西的格子
 
   function key(x, y) { return x + ',' + y; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -543,7 +542,7 @@
     }
   }
   // 各種格子的高度（丟出的東西比這高才能越過）
-  function tileTop(ch) { return ch === 'L' ? CFG.lowWallH : CFG.counterH; }
+  function tileTop(ch) { return CFG.counterH; }
   // 沿著飛行方向，這一格後面那一格是不是牆（或地圖外）
   function wallBehind(s, cx, cy, a) {
     var l = Math.hypot(a.vx, a.vy) || 1, ux = a.vx / l, uy = a.vy / l, x = a.x, y = a.y;

@@ -91,7 +91,6 @@
 
   var CH = 0.55; // 檯面高度（壓低，俯視才看得到出入口）
   var WALL_H = 0.42; // 牆高度（比檯面還矮，只當邊界）
-  var LOW_H = 0.3;   // 矮牆高度（可以放東西、可以丟過去）
   var ING_SCALE = 1.75, PLATE_SCALE = 1.3; // 食材、盤子放大，遠看也認得出來
 
   function create(container) {
@@ -116,7 +115,7 @@
     });
     hl.visible = false; scene.add(hl);
     function setTarget(cell, floor) {
-      if (cell) { hl.visible = true; hl.position.set(cell[0] + 0.5, (cells[cell[1]][cell[0]] === 'L' ? LOW_H : CH) + 0.09, cell[1] + 0.5); hl.scale.setScalar(1); }
+      if (cell) { hl.visible = true; hl.position.set(cell[0] + 0.5, CH + 0.09, cell[1] + 0.5); hl.scale.setScalar(1); }
       else if (floor) { hl.visible = true; hl.position.set(floor[0], 0.04, floor[1]); hl.scale.setScalar(0.6); }
       else hl.visible = false;
     }
@@ -150,11 +149,6 @@
         var fl = new T.Mesh(new T.PlaneGeometry(1, 1), mat((x + y) % 2 ? COL.floorA : COL.floorB));
         fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0, cz); world.add(fl);
         if (ch === '.') continue;
-        if (ch === 'L') {                                     // 矮牆：淺色石頭，比檯面矮
-          g = box(0.98, LOW_H, 0.98, 0x7D8A94, 0.04); g.position.set(cx, LOW_H / 2, cz); world.add(g);
-          var lcap = box(0.9, 0.05, 0.9, 0xA9B6BF, 0.04); lcap.position.set(cx, LOW_H + 0.025, cz); world.add(lcap);
-          continue;
-        }
         if (ch === '#') { g = box(1, WALL_H, 1, COL.wall, 0.02); g.position.set(cx, WALL_H / 2, cz); world.add(g); var cap = box(1, 0.04, 1, COL.wallTop, false); cap.position.set(cx, WALL_H + 0.02, cz); world.add(cap); continue; }
         // 所有工作台先有一個檯面座
         var baseCol = { V: COL.belt, M: COL.mover, W: COL.window, S: COL.stove, T: COL.trash, I: COL.crate, K: COL.counter, O: COL.serve }[ch] || COL.counter;
@@ -265,7 +259,7 @@
         var p = players[a.hand];
         return [p.x + p.fx * 0.5, 0.62, p.y + p.fy * 0.5];
       }
-      if (a.tile) { var xy = a.tile.split(','); return [+xy[0] + 0.5, (cells[+xy[1]][+xy[0]] === 'L' ? LOW_H : CH) + 0.06, +xy[1] + 0.5]; }
+      if (a.tile) { var xy = a.tile.split(','); return [+xy[0] + 0.5, CH + 0.06, +xy[1] + 0.5]; }
       if (a.floor) return [a.floor[0], 0.02, a.floor[1]];
       if (a.air) return [a.air.x, Math.max(0.02, a.air.h), a.air.y];
       return [0, -10, 0];
