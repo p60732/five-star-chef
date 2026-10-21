@@ -266,6 +266,8 @@
     }
 
     function lerp(a, b, t) { return a + (b - a) * t; }
+    // 把角度收回到最近的正面朝上（每幀轉回一部分）
+    function uprightStep(a) { var r = a % (Math.PI * 2); if (r > Math.PI) r -= Math.PI * 2; if (r < -Math.PI) r += Math.PI * 2; return r * 0.6; }
     function lerpPlayers(prev, cur, alpha) {
       return cur.players.map(function (p, i) {
         var q = prev && prev.players[i] ? prev.players[i] : p;
@@ -304,7 +306,11 @@
           rec.shadow.visible = true; rec.shadow.position.set(pos[0], 0.015, pos[2]);
           var sc = Math.max(0.4, 1 - pos[1] * 0.3); rec.shadow.scale.set(sc, sc, sc);
         } else if (rec.shadow) rec.shadow.visible = false;
-        else if (!it.at.slide) { rec.g.rotation.x = 0; rec.g.rotation.z = 0; }
+        // 不在空中就轉正：滑行時快速擺正，停住、被撿起或放上檯面時完全歸零
+        if (!it.at.air) {
+          if (it.at.slide) { rec.g.rotation.x = uprightStep(rec.g.rotation.x); rec.g.rotation.z = uprightStep(rec.g.rotation.z); }
+          else { rec.g.rotation.x = 0; rec.g.rotation.z = 0; }
+        }
         seen[id] = true;
       }
       for (var k in itemMeshes) if (!seen[k]) { dyn.remove(itemMeshes[k].g); if (itemMeshes[k].shadow) dyn.remove(itemMeshes[k].shadow); delete itemMeshes[k]; }
