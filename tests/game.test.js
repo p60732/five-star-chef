@@ -821,12 +821,14 @@ t('地上的盤子：可以把切好的放上去、可以疊、可以撿起來',
   assert.strictEqual(s.players[0].held, pid);
 });
 
-t('面對地板、旁邊有工作台時，盤子也能放在地上', () => {
+t('面對地板、旁邊的工作台都放不下時，東西可以放在地上', () => {
   let s = newGame('tomato_soup');
-  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子（旁邊就是盤架、檯面）
-  s = at(s, 2, 5, 'E'); s = press(s, 'act');                 // 面向地板 (3,5)
-  const pl = Object.values(s.items).find((i) => i.kind === 'plate');
-  assert.ok(pl.at.floor, '放在地上');
+  s.items['x7'] = { id: 'x7', kind: 'plate', dirty: false, contents: [], n: 1, at: { tile: '6,1' } };
+  s.tiles['6,1'].holds = 'x7'; s.tiles['1,7'].clean -= 1;     // (6,1) 檯面上放盤子（不收生番茄）
+  s = at(s, 1, 2, 'N'); s = press(s, 'act');                 // 生番茄
+  s = at(s, 6, 2, 'E'); s = press(s, 'act');                 // 旁邊有鍋、有盤子都不收，面前 (7,2) 是地板
+  const tomato = Object.values(s.items).find((i) => i.name === 'tomato');
+  assert.ok(tomato.at.floor, '放在地上');
 });
 
 t('面對放不下的工作台時，東西留在手上不會掉地上', () => {
