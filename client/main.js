@@ -80,7 +80,7 @@
       if (e.t === 'served') { floatAtPlayer(e.pid, '+' + e.points, 'good'); toast(DISH(e.dish) + ' 出餐！'); }
       if (e.t === 'wrong') toast('沒有這道菜的訂單');
       if (e.t === 'expired') toast(DISH(e.dish) + ' 等太久，客人走了 −' + Game.CFG.expirePenalty);
-      if (e.t === 'burnt') toast('鍋子燒焦了！空手按「動作」清掉，或用空盤盛起來倒進垃圾桶');
+      if (e.t === 'burnt') toast('鍋子燒焦了！把鍋子拿起來，搬到垃圾桶倒掉');
       if (e.t === 'order') pulse('orders');
       if (e.t === 'chopped') floatAtPlayer(e.pid, '切好了', '');
       if (e.t === 'washed') floatAtPlayer(e.pid, '洗好了', '');
@@ -171,14 +171,17 @@
     for (var tk in cur.tiles) {
       var t = cur.tiles[tk], a = tk.split(','), x = +a[0] + 0.5, z = +a[1] + 0.5;
       if (t.wash > 0) bar('w' + tk, x, 1.2, z, t.wash, 'wash');
-      if (t.pot) {
-        var pot = t.pot;
-        if (pot.burnt) bar('p' + tk, x, 1.35, z, 1, 'burnt', '燒焦');
-        else if (Game.potComplete(pot)) {
-          if (pot.cook < C.cookSec) bar('p' + tk, x, 1.35, z, pot.cook / C.cookSec, 'cook');
-          else bar('p' + tk, x, 1.35, z, 1 - (pot.cook - C.cookSec) / C.burnSec, (pot.cook - C.cookSec) > C.burnSec * 0.5 ? 'warn' : 'ready', '好了');
-        } else if (pot.contents.length) bar('p' + tk, x, 1.35, z, pot.contents.length / C.soupSize, 'partial', pot.contents.length + '/' + C.soupSize);
-      }
+    }
+    // 鍋子：放在格子上時顯示進度（煮的進度、還差幾份、快燒焦、燒焦）
+    for (var pid2 in cur.items) {
+      var pot = cur.items[pid2];
+      if (pot.kind !== 'pot' || !pot.at.tile) continue;
+      var pa = pot.at.tile.split(','), px = +pa[0] + 0.5, pz = +pa[1] + 0.5;
+      if (pot.burnt) bar('p' + pid2, px, 1.35, pz, 1, 'burnt', '燒焦');
+      else if (Game.potComplete(pot)) {
+        if (pot.cook < C.cookSec) bar('p' + pid2, px, 1.35, pz, pot.cook / C.cookSec, 'cook');
+        else bar('p' + pid2, px, 1.35, pz, 1 - (pot.cook - C.cookSec) / C.burnSec, (pot.cook - C.cookSec) > C.burnSec * 0.5 ? 'warn' : 'ready', '好了');
+      } else if (pot.contents.length) bar('p' + pid2, px, 1.35, pz, pot.contents.length / C.soupSize, 'partial', pot.contents.length + '/' + C.soupSize);
     }
     for (var k2 in barPool) if (!barPool[k2]._seen) { barPool[k2].remove(); delete barPool[k2]; }
   }

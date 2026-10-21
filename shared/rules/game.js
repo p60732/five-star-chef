@@ -66,13 +66,13 @@
     var r = Level.resolve(level, n);
     var cells = r.cells.map(function (row) { return row.join(''); });
     var props = level.props || {};
-    var tiles = {}, firstRack = null, returns = [];
+    var tiles = {}, firstRack = null, returns = [], stoves = [];
     cells.forEach(function (row, y) {
       for (var x = 0; x < row.length; x++) {
         var ch = row[x], k = key(x, y);
         if (HOLD_TILES[ch]) tiles[k] = { holds: null };
         if (ch === 'B') tiles[k] = { holds: null };
-        if (ch === 'S') tiles[k] = { pot: { contents: [], cook: 0, burnt: false } };
+        if (ch === 'S') { tiles[k] = { holds: null }; stoves.push(k); }   // 爐子只能放鍋
         if (ch === 'P') { tiles[k] = { clean: 0 }; if (!firstRack) firstRack = k; }
         if (ch === 'R') { tiles[k] = { dirty: 0 }; returns.push(k); }
         if (ch === 'K') tiles[k] = { dirty: 0, wash: 0, clean: 0 };   // clean：洗好、放在水槽旁的盤子
@@ -91,6 +91,12 @@
         }
       }
     });
+    var items = {}, nextId = 1;
+    stoves.forEach(function (k) {
+      var id = 'i' + nextId++;
+      items[id] = { id: id, kind: 'pot', contents: [], cook: 0, burnt: false, at: { tile: k } };
+      tiles[k].holds = id;
+    });
     var players = r.spawns.map(function (s, i) {
       return { id: i, x: s[0] + 0.5, y: s[1] + 0.5, fx: 0, fy: -1, held: null, busy: null };
     });
@@ -104,12 +110,12 @@
       stars: Level.starsFor(level, n),
       rng: (seed >>> 0) || 1,
       players: players,
-      items: {}, nextId: 1,
+      items: items, nextId: nextId,
       tiles: tiles, rack: firstRack, returns: returns,
       pendingReturn: [],          // 出餐後等著回來的盤子：[秒數]
       orders: [], nextOrderIn: CFG.firstOrderSec, nextOrderId: 1,
       score: 0,
-      stats: { served: 0, failed: 0, base: 0, tips: 0, penalty: 0, spawned: 0, trashed: 0, merged: 0, totalPlates: firstRack ? (level.plates || CFG.plates) : 0 },
+      stats: { served: 0, failed: 0, base: 0, tips: 0, penalty: 0, spawned: 0, trashed: 0, merged: 0, totalPlates: firstRack ? (level.plates || CFG.plates) : 0, totalPots: stoves.length },
       events: []
     };
   }
@@ -132,6 +138,7 @@
   function removeItem(s, id) { delete s.items[id]; }
   function isPlate(it) { return it && it.kind === 'plate'; }
   function isIng(it) { return it && it.kind === 'ing'; }
+  function isPot(it) { return it && it.kind === 'pot'; }
   function pn(it) { return it.n || 1; }                      // 一疊盤子有幾個
   // 空盤可以疊：都沒裝東西、乾淨／髒一致
   function stackable(a, b) {
@@ -186,6 +193,28 @@
   function putInPot(s, pot, it) {
     pot.contents.push(it.name); removeItem(s, it.id); s.stats.merged++;
   }
+  function emptyPot(pot) { pot.contents = []; pot.cook = 0; pot.burnt = false; }
+  // 托盤（盤子上同一種切好的湯料）倒進鍋；回傳倒了幾份
+  function pourTray(plate, pot) {
+    if (!isTray(plate)) return 0;
+    var name = plate.contents[0].split(':')[0], poured = 0;
+    while (plate.contents.length && potAccepts(pot, { kind: 'ing', name: name, state: 'cut' })) { plate.contents.pop(); pot.contents.push(name); poured++; }
+    return poured;
+  }
+  // 兩個東西碰在一起（手上的 held 對著檯面上的 on）會發生什麼；成功就改狀態並回傳代碼
+  function combine(s, p, held, on, t) {
+    if (stackable(on, held)) { on.n = pn(on) + pn(held); removeItem(s, held.id); p.held = null; return 'stack'; }
+    if (isPlate(on) && isIng(held) && plateCanTake(s, on, ingTag(held))) { on.contents.push(ingTag(held)); removeItem(s, held.id); p.held = null; s.stats.merged++; return 'toPlate'; }
+    if (isPlate(held) && isIng(on) && plateCanTake(s, held, ingTag(on))) { held.contents.push(ingTag(on)); removeItem(s, on.id); t.holds = null; s.stats.merged++; return 'toPlate'; }
+    // 鍋子：跟盤子一樣可以裝、可以倒
+    if (isPot(on) && isIng(held) && potAccepts(on, held)) { putInPot(s, on, held); p.held = null; return 'toPot'; }
+    if (isPot(held) && isIng(on) && potAccepts(held, on)) { putInPot(s, held, on); t.holds = null; return 'toPot'; }
+    if (isPot(on) && isPlate(held) && pourTray(held, on)) return 'pour';
+    if (isPot(held) && isPlate(on) && pourTray(on, held)) return 'pour';
+    if (isPot(on) && isPlate(held) && potReady(on) && plateCanTake(s, held, potOutput(on))) { held.contents.push(potOutput(on)); emptyPot(on); return 'fromPot'; }
+    if (isPot(held) && isPlate(on) && potReady(held) && plateCanTake(s, on, potOutput(held))) { on.contents.push(potOutput(held)); emptyPot(held); return 'potToPlate'; }
+    return null;
+  }
 
   // ── 對準：在身邊（含斜角）找最可能要互動的格子 ──
   // 分數＝距離 − 面向加權；只看前方與側邊，正後方不算。
@@ -224,7 +253,6 @@
     var ch = cellAt(s, c[0], c[1]), t = s.tiles[key(c[0], c[1])];
     if (ch === 'B' && !p.held && t.holds) { var it = s.items[t.holds]; return isIng(it) && it.state === 'raw' && !!CHOPPABLE[it.name]; }
     if (ch === 'K' && !p.held && t.dirty > 0) return true;
-    if (ch === 'S' && t.pot.burnt && !p.held) return true;   // 空手才直接清；拿著東西不會把焦鍋清掉
     return false;
   }
   function useTarget(s, p) {
@@ -314,40 +342,16 @@
       var on = t.holds ? s.items[t.holds] : null;
       if (!on) {
         if (ch === 'B' && !isIng(held)) return null;           // 砧板只放食材
+        if (ch === 'S' && !isPot(held)) return null;           // 爐子只放鍋
         t.holds = held.id; held.at = { tile: fk }; p.held = null; return 'place';
       }
-      if (stackable(on, held)) { on.n = pn(on) + pn(held); removeItem(s, held.id); p.held = null; return 'stack'; }
-      if (isPlate(on) && isIng(held) && plateCanTake(s, on, ingTag(held))) {
-        on.contents.push(ingTag(held)); removeItem(s, held.id); p.held = null; s.stats.merged++; return 'toPlate';
-      }
-      if (isPlate(held) && isIng(on) && plateCanTake(s, held, ingTag(on))) {
-        held.contents.push(ingTag(on)); removeItem(s, on.id); t.holds = null; s.stats.merged++; return 'toPlate';
-      }
-      return null;
-    }
-    if (ch === 'S') {
-      var pot = t.pot;
-      if (potAccepts(pot, held)) { putInPot(s, pot, held); p.held = null; return 'toPot'; }
-      if (isPlate(held) && isTray(held)) {                // 托盤上的湯料倒進鍋
-        var name = held.contents[0].split(':')[0], poured = 0;
-        while (held.contents.length && potAccepts(pot, { kind: 'ing', name: name, state: 'cut' })) {
-          held.contents.pop(); pot.contents.push(name); poured++;
-        }
-        if (poured) return 'pour';
-      }
-      if (isPlate(held) && pot.burnt) {                    // 燒焦的：只有空盤能接（之後拿去垃圾桶倒掉）
-        if (held.dirty || held.contents.length || pn(held) > 1) return null;
-        held.contents.push('burnt'); pot.contents = []; pot.cook = 0; pot.burnt = false; return 'scrapeBurnt';
-      }
-      if (isPlate(held) && potReady(pot) && plateCanTake(s, held, potOutput(pot))) {
-        held.contents.push(potOutput(pot)); pot.contents = []; pot.cook = 0; return 'fromPot';
-      }
-      return null;
+      return combine(s, p, held, on, t);
     }
     if (ch === 'O') return serve(s, p, held);
     if (ch === 'T') {
       if (isIng(held)) { removeItem(s, held.id); p.held = null; s.stats.trashed++; return 'trash'; }
       if (isPlate(held) && held.contents.length) { held.contents = []; return 'trashPlate'; }
+      if (isPot(held) && held.contents.length) { emptyPot(held); return 'trashPot'; }   // 焦掉的要整鍋搬來倒
       return null;
     }
     if (ch === 'K' && isPlate(held) && held.dirty) { t.dirty += pn(held); removeItem(s, held.id); p.held = null; return 'toSink'; }
@@ -433,7 +437,7 @@
         }
         // 撞到格子
         var t = s.tiles[ck];
-        if (ch === 'S' && potAccepts(t.pot, it)) { putInPot(s, t.pot, it); s.events.push({ t: 'potIn' }); break; }
+        if (t && t.holds && isPot(s.items[t.holds]) && potAccepts(s.items[t.holds], it)) { putInPot(s, s.items[t.holds], it); s.events.push({ t: 'potIn' }); break; }
         if (ch === 'T') { removeItem(s, it.id); s.stats.trashed++; break; }
         if (t && 'holds' in t && !t.holds) { t.holds = it.id; it.at = { tile: ck }; break; }
         if (t && t.holds && isPlate(s.items[t.holds]) && plateCanTake(s, s.items[t.holds], ingTag(it))) {   // 落進檯面上的盤子
@@ -481,10 +485,6 @@
   }
   function startUseAt(s, p, c) {
     var ch = cellAt(s, c[0], c[1]);
-    if (ch === 'S') {                                    // 清燒焦的鍋：一下就好
-      s.tiles[key(c[0], c[1])].pot = { contents: [], cook: 0, burnt: false };
-      s.events.push({ t: 'cleared', pid: p.id }); p.busy = null; return 'clear';
-    }
     var kind = ch === 'B' ? 'chop' : 'wash';
     p.busy = { kind: kind, x: c[0], y: c[1] };
     return kind;
@@ -586,8 +586,9 @@
 
     // 爐子
     for (var k in s.tiles) {
-      var pot = s.tiles[k].pot;
-      if (!pot || !potComplete(pot) || pot.burnt) continue;
+      if (cellAt(s, +k.split(',')[0], +k.split(',')[1]) !== 'S' || !s.tiles[k].holds) continue;
+      var pot = s.items[s.tiles[k].holds];
+      if (!isPot(pot) || !potComplete(pot) || pot.burnt) continue;
       pot.cook += dt;
       if (pot.cook >= CFG.cookSec + CFG.burnSec) { pot.burnt = true; s.events.push({ t: 'burnt', tile: k }); }
     }
@@ -628,6 +629,8 @@
     if (plateCount(s) !== s.stats.totalPlates) errs.push('盤子數不守恆：' + plateCount(s) + ' ≠ ' + s.stats.totalPlates);
     var expect = s.stats.spawned - s.stats.trashed - s.stats.merged;
     if (ingCount(s) !== expect) errs.push('食材數不守恆：' + ingCount(s) + ' ≠ ' + expect);
+    var pots = 0; for (var pid in s.items) if (isPot(s.items[pid])) pots++;
+    if (pots !== s.stats.totalPots) errs.push('鍋子數不守恆：' + pots + ' ≠ ' + s.stats.totalPots);
     var sc = s.stats.base + s.stats.tips - s.stats.penalty;
     if (s.score !== sc) errs.push('分數不守恆：' + s.score + ' ≠ ' + sc);
     // 每個東西只在一個地方
@@ -651,6 +654,12 @@
       if (isTray(it)) return '盤子（' + contentLabel(it.contents[0]) + ' ×' + it.contents.length + '）';
       return '盤子（' + it.contents.map(contentLabel).join('＋') + '）';
     }
+    if (isPot(it)) {
+      if (it.burnt) return '燒焦的鍋子';
+      if (!it.contents.length) return '空鍋';
+      if (potReady(it)) return '煮好的' + contentLabel(potOutput(it)) + '（鍋）';
+      return '鍋子（' + it.contents.map(function (n) { return NAMES[n]; }).join('、') + (potComplete(it) ? (it.cook > 0 ? '，煮' + Math.floor(it.cook / CFG.cookSec * 100) + '%' : '') : '，還差 ' + (CFG.soupSize - it.contents.length) + ' 份') + '）';
+    }
     return (it.state === 'cut' ? '切好的' : '') + NAMES[it.name];
   }
   function contentLabel(c) {
@@ -671,13 +680,8 @@
     out.target = tn;
     if (ch === 'I' && t) out.target = NAMES[t.item] + '箱';
     if (t && t.holds) out.target = tn + '上的' + itemLabel(s.items[t.holds]);
-    if (ch === 'S') {
-      var pot = t.pot;
-      out.target = pot.burnt ? '燒焦的鍋子' : !pot.contents.length ? '空鍋' :
-        potReady(pot) ? '煮好的' + contentLabel(potOutput(pot)) :
-        '鍋子（' + pot.contents.map(function (n) { return NAMES[n]; }).join('、') + (potComplete(pot) ? '，煮' + Math.floor(pot.cook / CFG.cookSec * 100) + '%' : '，還差 ' + (CFG.soupSize - pot.contents.length) + ' 份') + '）';
-      if (pot.burnt) out.use = '清掉';
-    }
+    if (ch === 'S' && t && t.holds) out.target = itemLabel(s.items[t.holds]);
+    if (ch === 'S' && t && !t.holds) out.target = '爐子（沒有鍋）';
     if (ch === 'P' && t) out.target = '盤架（' + t.clean + ' 個）';
     if (ch === 'R' && t) out.target = '回收口（' + t.dirty + ' 個髒盤）';
     if (ch === 'K' && t) out.target = '水槽（' + (t.dirty ? t.dirty + ' 個待洗' : '') + (t.dirty && t.clean ? '、' : '') + (t.clean ? t.clean + ' 個乾淨' : '') + (!t.dirty && !t.clean ? '空的' : '') + '）';
@@ -687,7 +691,7 @@
     var test = clone(s), r = grab(test, test.players[pid]);
     var GRAB = { pick: '拿起', crate: '拿' + (t && t.item ? NAMES[t.item] : ''), plate: '拿盤子', dirty: '拿髒盤', pickFloor: '撿起來',
       place: '放下', toPlate: '裝盤', toPot: '放進鍋', fromPot: '盛到盤子', serve: '出餐', trash: '丟掉', trashPlate: '倒掉盤裡的菜',
-      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', scrapeBurnt: '把焦掉的盛起來' };
+      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', trashPot: '倒掉鍋裡的東西', potToPlate: '倒進盤子' };
     out.grab = r ? GRAB[r] : '';
     if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
     out.use = '';
@@ -695,11 +699,10 @@
       var uch = cellAt(s, uc[0], uc[1]), ut = s.tiles[key(uc[0], uc[1])];
       if (uch === 'B') out.use = p.busy ? '切菜中 ' + Math.round(s.items[ut.holds].chop * 100) + '%' : '切';
       if (uch === 'K') out.use = p.busy ? '洗碗中' : '洗盤子';
-      if (uch === 'S') out.use = '清掉焦鍋';
     }
     // 主按鍵
     var test2 = clone(s), ra = act(test2, test2.players[pid]);
-    var ACT = { chop: '切', wash: '洗盤子', clear: '清掉焦鍋' };
+    var ACT = { chop: '切', wash: '洗盤子' };
     out.act = ra ? (ACT[ra] || GRAB[ra] || '') : '';
     if (p.busy && at && at.use) {
       var bt = s.tiles[key(p.busy.x, p.busy.y)];
@@ -713,6 +716,6 @@
     CFG: CFG, SIGNATURE: SIGNATURE, NAMES: NAMES,
     createGame: createGame, step: step, describe: describe, facingCell: facingCell,
     checkInvariants: checkInvariants, plateCount: plateCount, itemLabel: itemLabel, contentLabel: contentLabel,
-    potReady: potReady, potComplete: potComplete
+    potReady: potReady, potComplete: potComplete, isPot: isPot
   };
 });

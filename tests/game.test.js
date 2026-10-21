@@ -31,6 +31,8 @@ const press = (s, k) => go(s, { [k]: true });
 const holdUse = (s, sec) => go(s, { use: true }, Math.ceil(sec / DT));
 const wait = (s, sec) => go(s, {}, Math.ceil(sec / DT));
 const held = (s) => s.players[0].held && s.items[s.players[0].held];
+const potAt = (s, k) => s.items[s.tiles[k].holds];   // 爐子上的鍋
+const firstIng = (s) => Object.values(s.items).find((i) => i.kind === 'ing');
 
 // 1-1 的位置：番茄箱 (1,1)、生菜箱 (2,1)、砧板 (4,1)(5,1)、爐 (7,1)(8,1)、
 // 盤架 (1,7)、回收口 (2,7)、出餐口 (5,7)(6,7)、水槽 (9,3)、垃圾桶 (9,7)
@@ -58,9 +60,9 @@ t('閉環：番茄湯 拿→切→下鍋 ×3→煮→裝盤→出餐→髒盤回
     s = chopOne(s, 1, 4);
     s = at(s, 7, 2, 'N'); s = press(s, 'grab');              // 放進鍋
   }
-  assert.deepStrictEqual(s.tiles['7,1'].pot.contents, ['tomato', 'tomato', 'tomato']);
+  assert.deepStrictEqual(potAt(s, '7,1').contents, ['tomato', 'tomato', 'tomato']);
   s = wait(s, Game.CFG.cookSec + 0.1);
-  assert.ok(Game.potReady(s.tiles['7,1'].pot), '應該煮好');
+  assert.ok(Game.potReady(potAt(s, '7,1')), '應該煮好');
   s = at(s, 1, 6, 'S'); s = press(s, 'grab');                // 拿盤子
   assert.strictEqual(s.tiles['1,7'].clean, platesStart - 1);
   s = at(s, 7, 2, 'N'); s = press(s, 'grab');                // 盛湯
@@ -103,7 +105,7 @@ t('生的食材不能裝盤、不能下鍋做湯', () => {
   let s = newGame('tomato_soup');
   s = at(s, 1, 2, 'N'); s = press(s, 'grab');
   s = at(s, 7, 2, 'N'); s = press(s, 'grab');
-  assert.strictEqual(s.tiles['7,1'].pot.contents.length, 0);
+  assert.strictEqual(potAt(s, '7,1').contents.length, 0);
   assert.strictEqual(held(s).state, 'raw');
 });
 
@@ -112,10 +114,10 @@ t('鍋子只收同一種食材（番茄鍋放不進洋蔥、也放不進生菜�
   s.tiles['2,1'].item = 'onion';                                      // 測試用：把生菜箱換成洋蔥箱
   s = chopOne(s, 1, 4); s = at(s, 7, 2, 'N'); s = press(s, 'grab');
   s = chopOne(s, 2, 4); s = at(s, 7, 2, 'N'); s = press(s, 'grab');   // 洋蔥放不進番茄鍋
-  assert.deepStrictEqual(s.tiles['7,1'].pot.contents, ['tomato']);
+  assert.deepStrictEqual(potAt(s, '7,1').contents, ['tomato']);
   assert.strictEqual(held(s).name, 'onion');
   s = at(s, 8, 2, 'N'); s = press(s, 'grab');                         // 旁邊的空鍋可以
-  assert.deepStrictEqual(s.tiles['8,1'].pot.contents, ['onion']);
+  assert.deepStrictEqual(potAt(s, '8,1').contents, ['onion']);
 });
 
 t('丟出：隔兩格把切好的番茄丟進鍋', () => {
@@ -123,7 +125,7 @@ t('丟出：隔兩格把切好的番茄丟進鍋', () => {
   s = chopOne(s, 1, 4);
   s = at(s, 7, 3, 'N'); s = press(s, 'throw');               // (7,3) 往上，經過 (7,2) 進 (7,1) 的鍋
   s = wait(s, 0.5);
-  assert.deepStrictEqual(s.tiles['7,1'].pot.contents, ['tomato']);
+  assert.deepStrictEqual(potAt(s, '7,1').contents, ['tomato']);
   assert.ok(!s.players[0].held);
 });
 
@@ -139,7 +141,7 @@ t('丟出：撞牆掉在地上，可以撿回來', () => {
   s = at(s, 1, 2, 'N'); s = press(s, 'grab');
   s = at(s, 3, 4, 'E'); s = press(s, 'throw');               // 往右拋，落地彈一下、滑一點停住
   s = wait(s, 1.5);
-  const it = Object.values(s.items)[0];
+  const it = firstIng(s);
   assert.ok(it.at.floor, '應該在地上');
   const fx = Math.floor(it.at.floor[0]), fy = Math.floor(it.at.floor[1]);
   s = at(s, fx - 1, fy, 'E'); s = press(s, 'grab');
@@ -153,13 +155,13 @@ t('盤子不能丟', () => {
   assert.ok(held(s) && held(s).kind === 'plate');
 });
 
-t('煮過頭會燒焦；空手按動作也能直接清掉', () => {
+t('煮過頭會燒焦；空手按動作只會把鍋子拿起來，不會直接清掉', () => {
   let s = newGame('tomato_soup');
   for (let i = 0; i < 3; i++) { s = chopOne(s, 1, 4); s = at(s, 7, 2, 'N'); s = press(s, 'grab'); }
   s = wait(s, Game.CFG.cookSec + Game.CFG.burnSec + 0.2);
-  assert.ok(s.tiles['7,1'].pot.burnt);
+  assert.ok(potAt(s, '7,1').burnt);
   s = at(s, 7, 2, 'N'); s = press(s, 'act');
-  assert.ok(!s.tiles['7,1'].pot.burnt && s.tiles['7,1'].pot.contents.length === 0);
+  assert.ok(held(s).kind === 'pot' && held(s).burnt, '拿起燒焦的鍋');
 });
 
 t('錯的菜不能出餐，盤子留在手上', () => {
@@ -350,12 +352,20 @@ t('一顆鍵：番茄湯完整閉環只用移動、主按鍵', () => {
   assert.strictEqual(s.stats.served, 1);
 });
 
-t('一顆鍵：鍋子燒焦時空手按 → 清掉', () => {
+t('燒焦：把鍋子搬去垃圾桶倒掉，再放回爐子', () => {
   let s = newGame('tomato_soup');
-  s.tiles['7,1'].pot = { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true };
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true });
   s.stats.spawned = 3; s.stats.merged = 3;
-  s = at(s, 7, 2, 'N'); s = press(s, 'act');
-  assert.ok(!s.tiles['7,1'].pot.burnt);
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿起焦鍋
+  const pid = s.players[0].held;
+  assert.ok(!s.tiles['7,1'].holds, '爐子上沒有鍋了');
+  s = at(s, 9, 6, 'S');
+  assert.strictEqual(Game.describe(s, 0).act, '倒掉鍋裡的東西');
+  s = press(s, 'act');
+  assert.ok(!s.items[pid].burnt && !s.items[pid].contents.length, '鍋子倒乾淨了');
+  assert.strictEqual(s.players[0].held, pid, '鍋子還在手上');
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 放回爐子
+  assert.strictEqual(s.tiles['7,1'].holds, pid);
 });
 
 t('提示：主按鍵標籤會跟著情況變', () => {
@@ -393,7 +403,7 @@ t('托盤：一盤裝 3 份切好的洋蔥，整盤倒進鍋', () => {
   s = at(s, 8, 2, 'N');
   assert.strictEqual(Game.describe(s, 0).act, '倒進鍋');
   s = press(s, 'act');
-  assert.deepStrictEqual(s.tiles['8,1'].pot.contents, ['onion', 'onion', 'onion']);
+  assert.deepStrictEqual(potAt(s, '8,1').contents, ['onion', 'onion', 'onion']);
   assert.deepStrictEqual(held(s).contents, [], '倒完盤子是空的、還在手上');
   s = wait(s, Game.CFG.cookSec + 0.1);
   s = press(s, 'act');                                       // 用同一個盤子盛湯
@@ -415,7 +425,7 @@ t('托盤不能混不同食材、也不能超過 3 份', () => {
 
 t('鍋子煮好時拿空盤 → 盛起來', () => {
   let s = newGame('tomato_soup');
-  s.tiles['7,1'].pot = { contents: ['tomato', 'tomato', 'tomato'], cook: Game.CFG.cookSec + 1, burnt: false };
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: Game.CFG.cookSec + 1, burnt: false });
   s.stats.spawned = 3; s.stats.merged = 3;
   s = at(s, 1, 6, 'S'); s = press(s, 'act');
   s = at(s, 7, 2, 'N');
@@ -537,25 +547,19 @@ t('生的食材不能放上盤子（單個或一疊都不行）', () => {
   assert.strictEqual(held(s).state, 'raw');
 });
 
-t('燒焦：空盤可以把焦掉的盛起來，再拿去垃圾桶倒掉', () => {
+t('燒焦：拿盤子對焦鍋什麼都不會發生（只能整鍋搬去倒）', () => {
   let s = newGame('tomato_soup');
-  s.tiles['7,1'].pot = { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true };
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true });
   s.stats.spawned = 3; s.stats.merged = 3;
   s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 空盤
-  s = at(s, 7, 2, 'N');
-  assert.strictEqual(Game.describe(s, 0).act, '把焦掉的盛起來');
-  s = press(s, 'act');
-  assert.deepStrictEqual(held(s).contents, ['burnt']);
-  assert.ok(!s.tiles['7,1'].pot.burnt && !s.tiles['7,1'].pot.contents.length, '鍋子空了');
-  s = at(s, 5, 6, 'S'); s = press(s, 'act');                 // 不能出餐
-  assert.deepStrictEqual(held(s).contents, ['burnt']);
-  s = at(s, 9, 6, 'S'); s = press(s, 'act');                 // 垃圾桶倒掉
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');
   assert.deepStrictEqual(held(s).contents, []);
+  assert.ok(potAt(s, '7,1').burnt);
 });
 
 t('燒焦：盤子上有切好的食材時去接，什麼都不會發生（菜不會不見、鍋也不會被清掉）', () => {
   let s = newGame('salad'); s.dishes = ['salad', 'tomato_soup'];
-  s.tiles['7,1'].pot = { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true };
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true });
   s.stats.spawned = 3; s.stats.merged = 3;
   s = at(s, 1, 6, 'S'); s = press(s, 'act');
   s = at(s, 3, 2, 'N'); s = press(s, 'act');
@@ -563,7 +567,7 @@ t('燒焦：盤子上有切好的食材時去接，什麼都不會發生（菜�
   assert.deepStrictEqual(held(s).contents, ['lettuce:cut']);
   s = at(s, 7, 2, 'N'); s = press(s, 'act');
   assert.deepStrictEqual(held(s).contents, ['lettuce:cut'], '盤子上的生菜還在');
-  assert.ok(s.tiles['7,1'].pot.burnt, '焦鍋還在');
+  assert.ok(potAt(s, '7,1').burnt, '焦鍋還在');
 });
 
 t('晾盤位被佔住時，洗好的盤子留在水槽邊，還是拿得到', () => {
@@ -581,7 +585,7 @@ t('丟出是拋物線：中途有高度、約 4 格落地，落地後會停住',
   let s = newGame('tomato_soup');
   s = at(s, 1, 2, 'N'); s = press(s, 'grab');
   s = at(s, 3, 4, 'E'); s = press(s, 'throw');
-  const it0 = Object.values(s.items)[0];
+  const it0 = firstIng(s);
   let maxH = 0, landedX = null;
   for (let i = 0; i < 40; i++) {
     s = go(s, {});
@@ -601,9 +605,66 @@ t('丟出撞牆會彈回來掉在地上，不會卡進牆裡', () => {
   s = at(s, 1, 2, 'N'); s = press(s, 'grab');
   s = at(s, 8, 5, 'E'); s = press(s, 'throw');               // 右邊兩格就是牆
   s = wait(s, 1.5);
-  const it = Object.values(s.items)[0];
+  const it = firstIng(s);
   assert.ok(it.at.floor, '應該在地上');
   assert.ok(it.at.floor[0] < 10, '在牆內側，x=' + it.at.floor[0].toFixed(2));
+});
+
+t('鍋子可以拿：煮好的整鍋端去倒進檯面上的盤子', () => {
+  let s = newGame('tomato_soup');
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: Game.CFG.cookSec + 1, burnt: false });
+  s.stats.spawned = 3; s.stats.merged = 3;
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 盤子放 (3,1)
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿起鍋子
+  assert.strictEqual(held(s).kind, 'pot');
+  s = at(s, 3, 2, 'N');
+  assert.strictEqual(Game.describe(s, 0).act, '倒進盤子');
+  s = press(s, 'act');
+  assert.deepStrictEqual(s.items[s.tiles['3,1'].holds].contents, ['soup:tomato']);
+  assert.deepStrictEqual(held(s).contents, [], '鍋子空了');
+});
+
+t('鍋子可以拿：拿著鍋子去砧板把切好的裝進去', () => {
+  let s = newGame('tomato_soup');
+  s = chopOne(s, 1, 4); s = at(s, 4, 2, 'N'); s = press(s, 'act');   // 切好的放回砧板
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿鍋
+  s = at(s, 4, 2, 'N'); s = press(s, 'act');
+  assert.deepStrictEqual(held(s).contents, ['tomato']);
+  assert.ok(!s.tiles['4,1'].holds);
+});
+
+t('鍋子離開爐子就不會煮也不會焦，放回去接著煮', () => {
+  let s = newGame('tomato_soup');
+  Object.assign(potAt(s, '7,1'), { contents: ['tomato', 'tomato', 'tomato'], cook: 2, burnt: false });
+  s.stats.spawned = 3; s.stats.merged = 3;
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');
+  const pid = s.players[0].held;
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 放在檯面
+  s = wait(s, 30);
+  assert.ok(s.items[pid].cook < 2.1 && !s.items[pid].burnt, '檯面上不會煮');
+  s = press(s, 'act'); s = at(s, 7, 2, 'N'); s = press(s, 'act');   // 放回爐子
+  assert.strictEqual(s.tiles['7,1'].holds, pid);
+  s = wait(s, Game.CFG.cookSec);
+  assert.ok(Game.potReady(s.items[pid]));
+});
+
+t('爐子只能放鍋，鍋子不能放砧板', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 拿起鍋，爐子空了
+  s = at(s, 4, 2, 'N'); s = press(s, 'act');                 // 砧板放不了鍋
+  assert.strictEqual(held(s).kind, 'pot');
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 鍋子先放檯面，爐子 (7,1) 空著
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子
+  s = at(s, 7, 2, 'N'); s.players[0].fx = 0; s = press(s, 'act');   // 盤子不能放上空爐子
+  assert.strictEqual(held(s).kind, 'plate');
+  assert.ok(!s.tiles['7,1'].holds);
+});
+
+t('鍋子不能丟', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 7, 2, 'N'); s = press(s, 'act'); s = press(s, 'throw');
+  assert.strictEqual(held(s).kind, 'pot');
 });
 
 // 突變：守恆檢查真的會抓到錯
@@ -615,6 +676,11 @@ t('突變：食材憑空消失 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s = at(s, 1, 2, 'N'); s = press(s, 'grab');
   delete s.items[s.players[0].held]; s.players[0].held = null;
   assert.ok(Game.checkInvariants(s).some((e) => /食材/.test(e)));
+});
+
+t('突變：鍋子憑空消失 → 守恆檢查報錯', () => {
+  let s = newGame('tomato_soup'); delete s.items[s.tiles['7,1'].holds]; s.tiles['7,1'].holds = null;
+  assert.ok(Game.checkInvariants(s).some((e) => /鍋子/.test(e)));
 });
 
 console.log(`\n${pass} 通過，${fail} 失敗`);
