@@ -21,7 +21,8 @@
     'T': { name: '垃圾桶', station: true },
     'V': { name: '輸送帶', hold: true, mech: true },
     'M': { name: '移動檯面', hold: true, mech: true },
-    'W': { name: '定時窗口', hold: true, mech: true }
+    'W': { name: '定時窗口', hold: true, mech: true },
+    'L': { name: '矮牆（可放東西、可以丟過去）', hold: true }
   };
 
   var INGREDIENTS = {

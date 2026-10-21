@@ -693,6 +693,34 @@ t('鍋子不能丟', () => {
   assert.strictEqual(held(s).kind, 'pot');
 });
 
+t('矮牆：丟出的東西飛過去，落在另一邊的地板', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');                 // 拿洋蔥
+  s = at(s, 4, 6, 'E'); s = press(s, 'throw');               // (6,6) 是矮牆
+  s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor, '應該在地上');
+  assert.ok(it.at.floor[0] > 7, '越過矮牆到右邊，x=' + it.at.floor[0].toFixed(2));
+});
+
+t('普通牆：丟出的東西會被擋回來', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 4, 4, 'E'); s = press(s, 'throw');               // (6,4) 是普通牆
+  s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor && it.at.floor[0] < 6, '留在左邊，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
+});
+
+t('矮牆可以放東西，兩邊都拿得到', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 5, 6, 'E'); s = press(s, 'act');                 // 放上矮牆
+  assert.ok(s.tiles['6,6'].holds, '放在矮牆上');
+  s = at(s, 7, 6, 'W'); s = press(s, 'act');                 // 從另一邊拿
+  assert.strictEqual(held(s).name, 'onion');
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;

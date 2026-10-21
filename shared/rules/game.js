@@ -30,6 +30,7 @@
     launchH: 0.75,         // 出手高度
     bounce: 0.25,          // 落地反彈係數
     slideFriction: 9,      // 落地後滑行減速（格/秒²）
+    lowWallH: 0.35,        // 矮牆高度：丟出的東西比這高就飛過去
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
     patience: { salad: 50, tomato_soup: 70, onion_soup: 70, mushroom_soup: 70, tomato_noodle: 80 },
@@ -48,7 +49,7 @@
     tomato_noodle: ['noodle:cooked', 'tomato:cut']
   };
   var DIR4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
-  var HOLD_TILES = { C: 1, B: 1, V: 1, M: 1, W: 1 };   // 能放東西的格子
+  var HOLD_TILES = { C: 1, B: 1, V: 1, M: 1, W: 1, L: 1 };   // 能放東西的格子（L＝矮牆）
 
   function key(x, y) { return x + ',' + y; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -426,6 +427,7 @@
           else { it.at = { hand: catcher.id }; catcher.held = it.id; }
           s.events.push({ t: 'catch', pid: catcher.id }); break;
         }
+        if (ch === 'L' && a.h > CFG.lowWallH) continue;              // 矮牆：飛得夠高就越過去
         if (ch === '.' || ch === ' ') {
           if (a.h > 0) continue;
           if (ch === ' ') { land(s, it, a.x, a.y, px, py); break; }      // 掉進空地：放回最近的地板
