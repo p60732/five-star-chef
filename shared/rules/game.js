@@ -30,6 +30,11 @@
     launchH: 0.75,         // 出手高度
     bounce: 0.25,          // 落地反彈係數
     slideFriction: 9,      // 落地後滑行減速（格/秒²）
+    aimCone: 40,           // 丟出自動瞄準：面向左右各幾度內找目標
+    aimRange: 5,           // 自動瞄準最遠幾格
+    dashSpeed: 11,         // 衝刺速度（格/秒）
+    dashSec: 0.2,          // 衝刺持續秒數（約 2 格）
+    dashCooldown: 0.6,     // 衝刺冷卻
     lowWallH: 0.35,        // 矮牆高度：丟出的東西比這高就飛過去
     counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
     tipMax: 20,            // 小費上限
@@ -100,7 +105,7 @@
       tiles[k].holds = id;
     });
     var players = r.spawns.map(function (s, i) {
-      return { id: i, x: s[0] + 0.5, y: s[1] + 0.5, fx: 0, fy: -1, held: null, busy: null };
+      return { id: i, x: s[0] + 0.5, y: s[1] + 0.5, fx: 0, fy: -1, held: null, busy: null, dashT: 0, dashCd: 0 };
     });
     return {
       v: 1,
@@ -398,10 +403,83 @@
   function throwItem(s, p) {
     var held = p.held ? s.items[p.held] : null;
     if (!isIng(held)) return null;                      // 只能丟食材（盤子不能丟）
-    var len = Math.hypot(p.fx, p.fy) || 1;
-    held.at = { air: { x: p.x + p.fx / len * 0.3, y: p.y + p.fy / len * 0.3, h: CFG.launchH,
-      vx: p.fx / len * CFG.throwSpeed, vy: p.fy / len * CFG.throwSpeed, vh: CFG.throwUp, by: p.id } };
+    var aim = aimThrow(s, p, held);                     // 自動瞄準：面向附近有能接的目標就對準它
+    var ux = aim[0], uy = aim[1];
+    if (aim[2]) { p.fx = ux; p.fy = uy; }
+    held.at = { air: { x: p.x + ux * 0.3, y: p.y + uy * 0.3, h: CFG.launchH,
+      vx: ux * CFG.throwSpeed, vy: uy * CFG.throwSpeed, vh: CFG.throwUp, by: p.id } };
     p.held = null; return 'throw';
+  }
+
+  // ── 丟出的自動瞄準 ──
+  // 照面向丟會先撞到普通牆時才修正：在面向 ±aimCone 內、距離 0.6–aimRange 格，找丟過去會被好好接住或越過的目標：
+  // 隊友（空手或拿著收得下的盤子）、收得下的鍋子／盤子、垃圾桶、越過後落得到地板的檯面類。
+  // 回傳 [ux, uy, 有沒有修正]
+  function aimThrow(s, p, it) {
+    var fl = Math.hypot(p.fx, p.fy) || 1, fx = p.fx / fl, fy = p.fy / fl;
+    if (!rayHitsWall(s, p.x, p.y, fx, fy, it)) return [fx, fy, false];
+    var best = null, cosLim = Math.cos(CFG.aimCone * Math.PI / 180);
+    function consider(tx, ty, weight) {
+      var dx = tx - p.x, dy = ty - p.y, d = Math.hypot(dx, dy);
+      if (d < 0.6 || d > CFG.aimRange) return;
+      var c = (dx * fx + dy * fy) / d;
+      if (c < cosLim) return;
+      if (!clearPath(s, p.x, p.y, tx, ty)) return;
+      var score = (1 - c) * 4 + d * 0.08 - weight;
+      if (!best || score < best.score) best = { ux: dx / d, uy: dy / d, score: score };
+    }
+    s.players.forEach(function (q) {
+      if (q.id === p.id) return;
+      var qh = q.held ? s.items[q.held] : null;
+      if (!qh || (isPlate(qh) && plateCanTake(s, qh, ingTag(it)))) consider(q.x, q.y, 0.6);
+    });
+    for (var k in s.tiles) {
+      var xy = k.split(','), x = +xy[0], y = +xy[1], ch = cellAt(s, x, y), on = s.tiles[k].holds ? s.items[s.tiles[k].holds] : null;
+      if ((isPot(on) && potAccepts(on, it)) || (isPlate(on) && plateCanTake(s, on, ingTag(it)))) { consider(x + 0.5, y + 0.5, 0.5); continue; }
+      if (!('holds' in s.tiles[k])) continue;
+      var dx = x + 0.5 - p.x, dy = y + 0.5 - p.y, d = Math.hypot(dx, dy) || 1;
+      if (landsBeyond(s, x + 0.5, y + 0.5, dx / d, dy / d)) consider(x + 0.5, y + 0.5, 0.2);
+    }
+    return best ? [best.ux, best.uy, true] : [fx, fy, false];
+  }
+  // 照這個方向丟，在落地範圍內會不會先撞到普通牆（收得下的鍋、盤、垃圾桶、越得過的檯面都不算撞）
+  function rayHitsWall(s, x0, y0, ux, uy, it) {
+    var lastK = key(Math.floor(x0), Math.floor(y0));
+    for (var d = 0.3; d <= 4.6; d += 0.05) {
+      var x = x0 + ux * d, y = y0 + uy * d, cx = Math.floor(x), cy = Math.floor(y), k = key(cx, cy);
+      if (k === lastK) continue;
+      lastK = k;
+      var ch = cellAt(s, cx, cy), t = s.tiles[k], on = t && t.holds ? s.items[t.holds] : null;
+      if (ch === '.' || ch === ' ') continue;
+      if (ch === '#') return true;
+      if (ch === 'T' || (isPot(on) && potAccepts(on, it)) || (isPlate(on) && plateCanTake(s, on, ingTag(it)))) return false;
+      if (landsBeyond(s, cx + 0.5, cy + 0.5, ux, uy)) continue;
+      return false;                                       // 後面是牆：會落在這個檯面上，也算可以
+    }
+    return false;
+  }
+  // 從這格往 (ux,uy) 越過去，2.5 格內先碰到地板（而不是普通牆）
+  function landsBeyond(s, x0, y0, ux, uy) {
+    var sx = Math.floor(x0), sy = Math.floor(y0);
+    for (var d = 0.05; d <= 2.5; d += 0.05) {
+      var cx = Math.floor(x0 + ux * d), cy = Math.floor(y0 + uy * d);
+      if (cx === sx && cy === sy) continue;
+      var ch = cellAt(s, cx, cy);
+      if (ch === '.') return true;
+      if (ch === '#') return false;
+    }
+    return false;
+  }
+  // 從 (x0,y0) 到 (x1,y1) 的直線上沒有普通牆（不檢查終點那一格）
+  function clearPath(s, x0, y0, x1, y1) {
+    var d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / 0.1);
+    var ex = Math.floor(x1), ey = Math.floor(y1);
+    for (var i = 1; i < n; i++) {
+      var x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n, cx = Math.floor(x), cy = Math.floor(y);
+      if (cx === ex && cy === ey) break;
+      if (cellAt(s, cx, cy) === '#') return false;
+    }
+    return true;
   }
 
   // ── 丟出的物理：拋物線、撞牆反彈、落地彈一下再滑行停住（全部由規則算，伺服器與畫面一致）──
@@ -447,7 +525,7 @@
         if (isPot(on) && potAccepts(on, it)) { putInPot(s, on, it); s.events.push({ t: 'potIn' }); break; }
         if (isPlate(on) && plateCanTake(s, on, ingTag(it))) { on.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break; }
         // 2) 牆擋不住的檯面類都可以越過：後面不是牆、而且飛得比它高 → 繼續飛
-        if (ch !== '#' && a.h > tileTop(ch) && !wallBehind(s, cx, cy, a)) continue;
+        if (ch !== '#' && a.h > tileTop(ch) && landsBeyond(s, a.x, a.y, a.vx / Math.hypot(a.vx, a.vy), a.vy / Math.hypot(a.vx, a.vy))) continue;
         // 3) 後面是牆（或飛太低）：空的就落在上面，不然彈回來
         if (t && 'holds' in t && !t.holds) { t.holds = it.id; it.at = { tile: ck }; break; }
         // 牆或放不下：彈回來、繼續往下掉
@@ -461,9 +539,13 @@
   function tileTop(ch) { return ch === 'L' ? CFG.lowWallH : CFG.counterH; }
   // 沿著飛行方向，這一格後面那一格是不是牆（或地圖外）
   function wallBehind(s, cx, cy, a) {
-    var bx = cx, by = cy;
-    if (Math.abs(a.vx) >= Math.abs(a.vy)) bx += a.vx >= 0 ? 1 : -1; else by += a.vy >= 0 ? 1 : -1;
-    return cellAt(s, bx, by) === '#';
+    var l = Math.hypot(a.vx, a.vy) || 1, ux = a.vx / l, uy = a.vy / l, x = a.x, y = a.y;
+    for (var i = 0; i < 40; i++) {                     // 沿飛行方向走到離開這一格，看下一格
+      x += ux * 0.05; y += uy * 0.05;
+      var bx = Math.floor(x), by = Math.floor(y);
+      if (bx !== cx || by !== cy) return cellAt(s, bx, by) === '#';
+    }
+    return false;
   }
   function slideItem(s, it, dt) {
     var f = it.at.floor, v = it.at.slide, sp = Math.hypot(v.vx, v.vy);
@@ -588,7 +670,17 @@
 
     s.players.forEach(function (p) {
       var inp = inputs[p.id] || {};
-      var moved = move(s, p, inp.mx || 0, inp.my || 0, dt);
+      p.dashCd = Math.max(0, (p.dashCd || 0) - dt);
+      if (inp.dash && !p.dashT && !p.dashCd) { p.dashT = CFG.dashSec; p.dashCd = CFG.dashSec + CFG.dashCooldown; p.busy = null; s.events.push({ t: 'dash', pid: p.id }); }
+      var moved;
+      if (p.dashT > 0) {                                 // 衝刺中：朝面向衝，不吃搖桿
+        var fl2 = Math.hypot(p.fx, p.fy) || 1, step2 = Math.min(dt, p.dashT);
+        var nx2 = p.x + p.fx / fl2 * CFG.dashSpeed * step2, ny2 = p.y + p.fy / fl2 * CFG.dashSpeed * step2;
+        if (!blocked(s, nx2, p.y)) p.x = nx2;
+        if (!blocked(s, p.x, ny2)) p.y = ny2;
+        p.dashT = Math.max(0, p.dashT - dt);
+        moved = true;
+      } else moved = move(s, p, inp.mx || 0, inp.my || 0, dt);
       if (moved) p.busy = null;
       if (inp.grab) { p.busy = null; var r = grab(s, p); s.events.push({ t: r ? 'grab:' + r : 'nothing', pid: p.id }); }
       if (inp['throw']) { var r2 = throwItem(s, p); if (r2) s.events.push({ t: 'throw', pid: p.id }); }

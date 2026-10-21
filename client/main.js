@@ -14,7 +14,7 @@
 
   var desc = null;            // 「面前是什麼、按鍵會做什麼」，每個 tick 算一次
   var R = null, cur = null, prev = null, level = null, acc = 0, last = 0, running = false, paused = false;
-  var input = { mx: 0, my: 0, act: false, throw: false };
+  var input = { mx: 0, my: 0, act: false, throw: false, dash: false };
   var key = { up: 0, down: 0, left: 0, right: 0 };
 
   // ── 畫面切換 ──
@@ -59,8 +59,8 @@
       acc += dt;
       while (acc >= STEP) {
         var mx = input.mx + (key.right - key.left), my = input.my + (key.down - key.up);
-        var inp = { mx: mx, my: my, act: input.act, throw: input.throw };
-        input.act = false; input.throw = false;
+        var inp = { mx: mx, my: my, act: input.act, throw: input.throw, dash: input.dash };
+        input.act = false; input.throw = false; input.dash = false;
         prev = cur; cur = Game.step(cur, { 0: inp }, STEP);
         handleEvents(cur.events);
         desc = null;
@@ -221,22 +221,28 @@
   $('toMenu').addEventListener('click', function () { show('menu'); });
 
   // ── 搖桿（浮動：在左半邊哪裡按下，搖桿就出現在哪裡）──
-  var joy = $('joy'), knob = $('knob'), joyId = null, jx = 0, jy = 0, R_JOY = 56;
+  var joy = $('joy'), knob = $('knob'), joyId = null, jx = 0, jy = 0, R_JOY = 56, joyT = 0, joyMax = 0;
   var pad = $('padArea');
   pad.addEventListener('pointerdown', function (e) {
     if (joyId !== null) return;
-    joyId = e.pointerId; jx = e.clientX; jy = e.clientY;
+    joyId = e.pointerId; jx = e.clientX; jy = e.clientY; joyT = performance.now(); joyMax = 0;
     joy.hidden = false; joy.style.left = jx + 'px'; joy.style.top = jy + 'px'; knob.style.transform = 'translate(-50%,-50%)';
     pad.setPointerCapture(e.pointerId); e.preventDefault();
   });
   pad.addEventListener('pointermove', function (e) {
     if (e.pointerId !== joyId) return;
     var dx = e.clientX - jx, dy = e.clientY - jy, l = Math.hypot(dx, dy);
+    joyMax = Math.max(joyMax, l);
     if (l > R_JOY) { dx = dx / l * R_JOY; dy = dy / l * R_JOY; }
     knob.style.transform = 'translate(calc(-50% + ' + dx + 'px), calc(-50% + ' + dy + 'px))';
     input.mx = dx / R_JOY; input.my = dy / R_JOY;
   });
-  function joyEnd(e) { if (e.pointerId !== joyId) return; joyId = null; input.mx = input.my = 0; joy.hidden = true; }
+  // 點一下搖桿（快放、幾乎沒拖）＝衝刺，朝角色面向衝出去
+  function joyEnd(e) {
+    if (e.pointerId !== joyId) return;
+    if (e.type === 'pointerup' && performance.now() - joyT < 220 && joyMax < 14) input.dash = true;
+    joyId = null; input.mx = input.my = 0; joy.hidden = true;
+  }
   pad.addEventListener('pointerup', joyEnd); pad.addEventListener('pointercancel', joyEnd);
 
   // ── 三顆鍵 ──
@@ -258,6 +264,7 @@
     if (e.repeat) return;
     if (e.code === 'KeyJ' || e.code === 'KeyK' || e.code === 'Space') { input.act = true; e.preventDefault(); }
     if (e.code === 'KeyL') input.throw = true;
+    if (e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyI') input.dash = true;
     if (e.code === 'KeyC') setCam(settings.cam === 'top' ? 'follow' : 'top');
   });
   window.addEventListener('keyup', function (e) {
@@ -266,5 +273,6 @@
   window.addEventListener('blur', function () { key.up = key.down = key.left = key.right = 0; });
   document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
 
+  window.FSC_DEBUG = { state: function () { return cur; } };   // 給自動測試讀目前狀態用
   buildMenu(); show('menu');
 })();

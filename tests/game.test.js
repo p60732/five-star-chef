@@ -703,13 +703,81 @@ t('矮牆：丟出的東西飛過去，落在另一邊的地板', () => {
   assert.ok(it.at.floor[0] > 7, '越過矮牆到右邊，x=' + it.at.floor[0].toFixed(2));
 });
 
-t('普通牆：丟出的東西會被擋回來', () => {
+t('自動瞄準：對著牆丟，會自動對準旁邊能越過的檯面', () => {
   let s = Game.createGame(L12, 1, 1);
   s = at(s, 2, 2, 'N'); s = press(s, 'act');
-  s = at(s, 4, 4, 'E'); s = press(s, 'throw');               // (6,4) 是普通牆
+  s = at(s, 4, 4, 'E'); s = press(s, 'throw');               // 正前方 (6,4) 是普通牆，旁邊 (6,3)(6,5) 是傳菜檯面
   s = wait(s, 1.5);
   const it = firstIng(s);
-  assert.ok(it.at.floor && it.at.floor[0] < 6, '留在左邊，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
+  assert.ok(it.at.floor && it.at.floor[0] > 7, '自動越過檯面到右邊，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
+});
+
+t('自動瞄準：斜著丟也能越過中間的檯面', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 4, 6, 'E'); s.players[0].fx = 0.8; s.players[0].fy = -0.6;   // 斜右上
+  s = press(s, 'throw'); s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor && it.at.floor[0] > 7, '到了右邊，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
+});
+
+t('自動瞄準：照面向丟本來就沒問題時不修正方向', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 3, 4, 'E'); s = press(s, 'throw');
+  assert.strictEqual(s.players[0].fx, 1); assert.strictEqual(s.players[0].fy, 0);
+});
+
+t('普通牆：附近沒有能越過的目標時，丟出的東西會被擋回來', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 8, 5, 'E'); s = press(s, 'throw'); s = wait(s, 1.5);
+  const it = firstIng(s);
+  assert.ok(it.at.floor && it.at.floor[0] < 10);
+});
+
+t('自動瞄準：直丟沒問題時，就算旁邊有隊友也不轉向', () => {
+  let s = Game.createGame(L11, 2, 1);
+  s = JSON.parse(JSON.stringify(s));
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { hand: 0 } };
+  s.players[0].held = 'x1'; s.stats.spawned = 1;
+  Object.assign(s.players[0], { x: 3.5, y: 4.5, fx: 1, fy: 0 });
+  Object.assign(s.players[1], { x: 6.5, y: 3.0 });          // 右前方約 27°
+  s = Game.step(s, { 0: { throw: true } }, DT);
+  assert.strictEqual(s.players[0].fx, 1);
+});
+
+t('自動瞄準：隔著牆的目標不算', () => {
+  let s = Game.createGame(L12, 2, 1);
+  s = JSON.parse(JSON.stringify(s));
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'onion', state: 'raw', chop: 0, at: { hand: 0 } };
+  s.players[0].held = 'x1'; s.stats.spawned = 1;
+  Object.assign(s.players[0], { x: 5.5, y: 8.5, fx: 1, fy: 0 });   // 正前方 (6,8) 是牆
+  Object.assign(s.players[1], { x: 8.5, y: 7.5 });          // 隊友在牆後
+  s = Game.step(s, { 0: { throw: true } }, DT);
+  assert.strictEqual(s.players[0].fx, 1, '不應該轉向牆後的隊友');
+});
+
+t('衝刺：朝面向衝出約 2 格，冷卻中不能再衝', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 2, 4, 'E');
+  const x0 = s.players[0].x;
+  s = go(s, { dash: true }); s = wait(s, 0.3);
+  const d1 = s.players[0].x - x0;
+  assert.ok(d1 > 1.6 && d1 < 2.8, '衝了約 2 格，實際 ' + d1.toFixed(2));
+  const x1 = s.players[0].x;
+  s = go(s, { dash: true }); s = wait(s, 0.1);
+  assert.ok(s.players[0].x - x1 < 0.1, '冷卻中不能再衝');
+  s = wait(s, Game.CFG.dashCooldown);
+  s = go(s, { dash: true }); s = wait(s, 0.3);
+  assert.ok(s.players[0].x - x1 > 1, '冷卻完可以再衝');
+});
+
+t('衝刺撞牆會停住，不會穿牆', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 8, 5, 'E');
+  s = go(s, { dash: true }); s = wait(s, 0.4);
+  assert.ok(s.players[0].x < 10 - Game.CFG.radius + 0.01, 'x=' + s.players[0].x.toFixed(2));
 });
 
 t('矮牆可以放東西，兩邊都拿得到', () => {
