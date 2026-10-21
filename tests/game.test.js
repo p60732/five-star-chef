@@ -806,6 +806,36 @@ t('檯面後面是牆、檯面上已經有東西：彈回來掉在地上', () =>
   assert.ok(tomato.at.floor, '番茄在地上');
 });
 
+t('地上的盤子：可以把切好的放上去、可以疊、可以撿起來', () => {
+  let s = newGame('salad');
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子
+  s = at(s, 5, 4, 'E'); s = press(s, 'act');                 // 面向地板 → 放在地上
+  const pid = Object.values(s.items).find((i) => i.kind === 'plate').id;
+  assert.ok(s.items[pid].at.floor, '盤子在地上');
+  s = chopOne(s, 2, 4);
+  s = at(s, 5, 4, 'E');
+  assert.strictEqual(Game.describe(s, 0).act, '裝盤');
+  s = press(s, 'act');
+  assert.deepStrictEqual(s.items[pid].contents, ['lettuce:cut'], '裝到地上的盤子');
+  s = press(s, 'act');                                       // 空手 → 撿起來
+  assert.strictEqual(s.players[0].held, pid);
+});
+
+t('面對地板、旁邊有工作台時，盤子也能放在地上', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');                 // 拿盤子（旁邊就是盤架、檯面）
+  s = at(s, 2, 5, 'E'); s = press(s, 'act');                 // 面向地板 (3,5)
+  const pl = Object.values(s.items).find((i) => i.kind === 'plate');
+  assert.ok(pl.at.floor, '放在地上');
+});
+
+t('面對放不下的工作台時，東西留在手上不會掉地上', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'act');                 // 生番茄
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 對著鍋（不收生的）
+  assert.ok(held(s) && held(s).name === 'tomato');
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;

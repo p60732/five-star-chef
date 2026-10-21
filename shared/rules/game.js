@@ -293,16 +293,25 @@
       return grabAt(s, p, t.c);
     }
     p.busy = null;
-    if (p.held && candidates(s, p).length) return null;
-    return grabFloor(s, p);
+    return floorOrKeep(s, p);
   }
 
   // ── 拿 / 放 ──
   function grab(s, p) {
     var c = grabTarget(s, p);
     if (c) { faceTo(p, c[0], c[1]); return grabAt(s, p, c); }
-    // 手上有東西、身邊又有工作台但都放不了：保留在手上（不要不小心掉在地上）
-    if (p.held && candidates(s, p).length) return null;
+    return floorOrKeep(s, p);
+  }
+  // 身邊的工作台都沒反應時：先試地上的東西（裝盤、疊盤、倒鍋…），
+  // 不行的話，面對地板就放在地上；面對工作台（只是放不下）就留在手上，免得不小心掉地上
+  function floorOrKeep(s, p) {
+    var held = p.held ? s.items[p.held] : null;
+    if (held) {
+      var fl = floorItemNear(s, p);
+      if (fl) { var r = combine(s, p, held, fl, {}); if (r) return r; }
+      var fc = facingCell(p);
+      if (candidates(s, p).length && !walkable(s, fc[0], fc[1])) return null;
+    }
     return grabFloor(s, p);
   }
   // 身邊沒有可互動的格子：撿地上的東西，或把手上的東西放在面前的地上
@@ -788,7 +797,7 @@
     var fc = (at && at.c) || facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
     var held = p.held ? s.items[p.held] : null;
     var out = { holding: itemLabel(held), target: '', grab: '', use: '', act: '', canThrow: isIng(held), cell: at ? at.c : null, busy: !!p.busy };
-    if (!at && !held) { var fl = floorItemNear(s, p); if (fl) out.floor = fl.at.floor; }
+    if (!at) { var fl = floorItemNear(s, p); if (fl) out.floor = fl.at.floor; }
     var tn = Level.TILES[ch] ? Level.TILES[ch].name : '';
     out.target = tn;
     if (ch === 'I' && t) out.target = NAMES[t.item] + '箱';
