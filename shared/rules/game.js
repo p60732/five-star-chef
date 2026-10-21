@@ -193,6 +193,31 @@
     return null;
   }
 
+  // ── 一顆鍵：在最可能的那一格上，能切／洗／清鍋就做，不然就拿或放 ──
+  // 例：砧板上有生番茄 → 切；切好了 → 拿起來；空手對水槽 → 洗；拿髒盤對水槽 → 放進去。
+  function actTarget(s, p) {
+    var list = candidates(s, p);
+    for (var i = 0; i < list.length; i++) {
+      var c = [list[i].x, list[i].y];
+      if (useOk(s, p, c)) return { c: c, use: true };
+      var dry = clone(s);
+      if (grabAt(dry, dry.players[p.id], c)) return { c: c, use: false };
+    }
+    return null;
+  }
+  function act(s, p) {
+    var t = actTarget(s, p);
+    if (t) {
+      faceTo(p, t.c[0], t.c[1]);
+      if (t.use) return startUseAt(s, p, t.c);
+      p.busy = null;
+      return grabAt(s, p, t.c);
+    }
+    p.busy = null;
+    if (p.held && candidates(s, p).length) return null;
+    return grabFloor(s, p);
+  }
+
   // ── 拿 / 放 ──
   function grab(s, p) {
     var c = grabTarget(s, p);
@@ -350,13 +375,17 @@
     var c = useTarget(s, p);
     if (!c) return false;
     faceTo(p, c[0], c[1]);
+    return startUseAt(s, p, c);
+  }
+  function startUseAt(s, p, c) {
     var ch = cellAt(s, c[0], c[1]);
     if (ch === 'S') {                                    // 清燒焦的鍋：一下就好
       s.tiles[key(c[0], c[1])].pot = { contents: [], cook: 0, burnt: false };
-      s.events.push({ t: 'cleared', pid: p.id }); p.busy = null; return true;
+      s.events.push({ t: 'cleared', pid: p.id }); p.busy = null; return 'clear';
     }
-    p.busy = { kind: ch === 'B' ? 'chop' : 'wash', x: c[0], y: c[1] };
-    return true;
+    var kind = ch === 'B' ? 'chop' : 'wash';
+    p.busy = { kind: kind, x: c[0], y: c[1] };
+    return kind;
   }
   function workBusy(s, p, dt) {
     var b = p.busy, c = [b.x, b.y], t = s.tiles[key(b.x, b.y)];
@@ -424,7 +453,8 @@
   }
 
   // ── 一個 tick ──
-  // inputs[pid] = { mx, my, grab: bool（這一刻按下）, throw: bool, use: bool（按著；按一下就會開始自動切／洗）}
+  // inputs[pid] = { mx, my, act: bool（主按鍵：拿／放／切／洗，這一刻按下）, throw: bool }
+  // 舊的分開按鍵 grab / use 仍支援（測試與日後設定用）
   function step(prev, inputs, dt) {
     var s = clone(prev);
     s.events = [];
@@ -437,6 +467,7 @@
       if (moved) p.busy = null;
       if (inp.grab) { p.busy = null; var r = grab(s, p); s.events.push({ t: r ? 'grab:' + r : 'nothing', pid: p.id }); }
       if (inp['throw']) { var r2 = throwItem(s, p); if (r2) s.events.push({ t: 'throw', pid: p.id }); }
+      if (inp.act) { var ra = act(s, p); s.events.push({ t: ra ? 'act:' + ra : 'nothing', pid: p.id }); }
       if (inp.use && !moved && !p.busy) startUse(s, p);
       if (p.busy) workBusy(s, p, dt);
     });
@@ -519,11 +550,11 @@
   }
   function describe(s, pid) {
     var p = s.players[pid];
-    var gc = grabTarget(s, p), uc = useTarget(s, p);
-    var fc = gc || uc || facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
+    var at = actTarget(s, p), gc = grabTarget(s, p), uc = useTarget(s, p);
+    var fc = (at && at.c) || facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
     var held = p.held ? s.items[p.held] : null;
-    var out = { holding: itemLabel(held), target: '', grab: '', use: '', canThrow: isIng(held), cell: gc || uc || null, busy: !!p.busy };
-    if (!gc && !held) { var fl = floorItemNear(s, p); if (fl) out.floor = fl.at.floor; }
+    var out = { holding: itemLabel(held), target: '', grab: '', use: '', act: '', canThrow: isIng(held), cell: at ? at.c : null, busy: !!p.busy };
+    if (!at && !held) { var fl = floorItemNear(s, p); if (fl) out.floor = fl.at.floor; }
     var tn = Level.TILES[ch] ? Level.TILES[ch].name : '';
     out.target = tn;
     if (ch === 'I' && t) out.target = NAMES[t.item] + '箱';
@@ -554,7 +585,15 @@
       if (uch === 'K') out.use = p.busy ? '洗碗中' : '洗盤子';
       if (uch === 'S') out.use = '清掉焦鍋';
     }
-    if (!out.grab && !out.use && held && ch !== 'O') out.grab = '';
+    // 主按鍵
+    var test2 = clone(s), ra = act(test2, test2.players[pid]);
+    var ACT = { chop: '切', wash: '洗盤子', clear: '清掉焦鍋' };
+    out.act = ra ? (ACT[ra] || GRAB[ra] || '') : '';
+    if (p.busy && at && at.use) {
+      var bt = s.tiles[key(p.busy.x, p.busy.y)];
+      out.act = p.busy.kind === 'chop' && bt.holds ? '切菜中 ' + Math.round(s.items[bt.holds].chop * 100) + '%' : '洗碗中';
+    }
+    if (ch === 'O' && isPlate(held) && held.contents.length && !ra) out.act = '沒有這道菜的訂單';
     return out;
   }
 

@@ -305,6 +305,62 @@ t('1 人：訂單間隔比較長、同時最多 2 張、客人比較有耐心', 
   assert.ok(a.orders[0].total > b.orders[0].total, '1 人的耐心應該比 4 人長');
 });
 
+t('一顆鍵：砧板上有生菜 → 切；切好 → 拿起來', () => {
+  let s = newGame('salad');
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');                 // 拿生菜
+  assert.strictEqual(held(s).name, 'lettuce');
+  s = at(s, 4, 2, 'N'); s = press(s, 'act');                 // 放上砧板
+  assert.ok(s.tiles['4,1'].holds);
+  s = press(s, 'act');                                       // 再按 → 開始切
+  assert.strictEqual(s.players[0].busy && s.players[0].busy.kind, 'chop');
+  s = wait(s, Game.CFG.chopSec + 0.1);
+  assert.strictEqual(s.items[s.tiles['4,1'].holds].state, 'cut');
+  s = press(s, 'act');                                       // 切好了 → 拿起來
+  assert.ok(held(s) && held(s).state === 'cut');
+});
+
+t('一顆鍵：空手對水槽 → 洗；拿著髒盤對水槽 → 放進去', () => {
+  let s = newGame('tomato_soup');
+  s.tiles['2,7'].dirty = 1; s.tiles['1,7'].clean -= 1;
+  s = at(s, 2, 6, 'S'); s = press(s, 'act');                 // 拿髒盤
+  assert.ok(held(s).dirty);
+  s = at(s, 8, 3, 'E'); s = press(s, 'act');                 // 放進水槽
+  assert.strictEqual(s.tiles['9,3'].dirty, 1);
+  s = press(s, 'act');                                       // 空手再按 → 洗
+  s = wait(s, Game.CFG.washSec + 0.1);
+  assert.strictEqual(s.tiles['1,7'].clean, Game.CFG.plates);
+});
+
+t('一顆鍵：番茄湯完整閉環只用移動、主按鍵', () => {
+  let s = newGame('tomato_soup');
+  s = wait(s, Game.CFG.firstOrderSec + 0.1);
+  for (let i = 0; i < 3; i++) {
+    s = at(s, 1, 2, 'N'); s = press(s, 'act');
+    s = at(s, 4, 2, 'N'); s = press(s, 'act'); s = press(s, 'act'); s = wait(s, Game.CFG.chopSec + 0.1); s = press(s, 'act');
+    s = at(s, 7, 2, 'N'); s = press(s, 'act');
+  }
+  s = wait(s, Game.CFG.cookSec + 0.1);
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');
+  s = at(s, 5, 6, 'S'); s = press(s, 'act');
+  assert.strictEqual(s.stats.served, 1);
+});
+
+t('一顆鍵：鍋子燒焦時空手按 → 清掉', () => {
+  let s = newGame('tomato_soup');
+  s.tiles['7,1'].pot = { contents: ['tomato', 'tomato', 'tomato'], cook: 99, burnt: true };
+  s.stats.spawned = 3; s.stats.merged = 3;
+  s = at(s, 7, 2, 'N'); s = press(s, 'act');
+  assert.ok(!s.tiles['7,1'].pot.burnt);
+});
+
+t('提示：主按鍵標籤會跟著情況變', () => {
+  let s = newGame('salad');
+  s = at(s, 2, 2, 'N'); assert.strictEqual(Game.describe(s, 0).act, '拿生菜');
+  s = press(s, 'act'); s = at(s, 4, 2, 'N'); assert.strictEqual(Game.describe(s, 0).act, '放下');
+  s = press(s, 'act'); assert.strictEqual(Game.describe(s, 0).act, '切');
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;

@@ -14,7 +14,7 @@
 
   var desc = null;            // 「面前是什麼、按鍵會做什麼」，每個 tick 算一次
   var R = null, cur = null, prev = null, level = null, acc = 0, last = 0, running = false, paused = false;
-  var input = { mx: 0, my: 0, grab: false, throw: false, use: false };
+  var input = { mx: 0, my: 0, act: false, throw: false };
   var key = { up: 0, down: 0, left: 0, right: 0 };
 
   // ── 畫面切換 ──
@@ -59,8 +59,8 @@
       acc += dt;
       while (acc >= STEP) {
         var mx = input.mx + (key.right - key.left), my = input.my + (key.down - key.up);
-        var inp = { mx: mx, my: my, grab: input.grab, throw: input.throw, use: input.use };
-        input.grab = false; input.throw = false;
+        var inp = { mx: mx, my: my, act: input.act, throw: input.throw };
+        input.act = false; input.throw = false;
         prev = cur; cur = Game.step(cur, { 0: inp }, STEP);
         handleEvents(cur.events);
         desc = null;
@@ -80,7 +80,7 @@
       if (e.t === 'served') { floatAtPlayer(e.pid, '+' + e.points, 'good'); toast(DISH(e.dish) + ' 出餐！'); }
       if (e.t === 'wrong') toast('沒有這道菜的訂單');
       if (e.t === 'expired') toast(DISH(e.dish) + ' 等太久，客人走了 −' + Game.CFG.expirePenalty);
-      if (e.t === 'burnt') toast('鍋子燒焦了！走到鍋子前按「切/互動」清掉');
+      if (e.t === 'burnt') toast('鍋子燒焦了！空手走到鍋子前按「動作」清掉');
       if (e.t === 'order') pulse('orders');
       if (e.t === 'chopped') floatAtPlayer(e.pid, '切好了', '');
       if (e.t === 'washed') floatAtPlayer(e.pid, '洗好了', '');
@@ -139,10 +139,9 @@
     if (d.holding) parts.push('手上：' + d.holding);
     if (d.target) parts.push('面前：' + d.target);
     $('hint').textContent = parts.join('　') || '用左下角搖桿走到工作台前面';
-    $('gSub').textContent = d.grab || '—';
-    $('uSub').textContent = d.use || '—';
-    $('btnGrab').classList.toggle('dim', !d.grab);
-    $('btnUse').classList.toggle('dim', !d.use);
+    $('actSub').textContent = d.act || '—';
+    $('btnAct').classList.toggle('dim', !d.act);
+    $('btnAct').classList.toggle('working', d.busy);
     $('btnThrow').classList.toggle('dim', !d.canThrow);
 
     drawBars();
@@ -245,8 +244,7 @@
     b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
     b.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   }
-  bindBtn('btnGrab', function () { input.grab = true; });
-  bindBtn('btnUse', function () { input.use = true; }, function () { input.use = false; });
+  bindBtn('btnAct', function () { input.act = true; });
   bindBtn('btnThrow', function () { input.throw = true; });
 
   // ── 鍵盤（電腦）──
@@ -255,16 +253,14 @@
     if ($('play').hidden) return;
     if (KEYS[e.code]) { key[KEYS[e.code]] = 1; e.preventDefault(); }
     if (e.repeat) return;
-    if (e.code === 'KeyJ' || e.code === 'Space') { input.grab = true; e.preventDefault(); }
-    if (e.code === 'KeyK') input.use = true;
+    if (e.code === 'KeyJ' || e.code === 'KeyK' || e.code === 'Space') { input.act = true; e.preventDefault(); }
     if (e.code === 'KeyL') input.throw = true;
     if (e.code === 'KeyC') setCam(settings.cam === 'top' ? 'follow' : 'top');
   });
   window.addEventListener('keyup', function (e) {
     if (KEYS[e.code]) key[KEYS[e.code]] = 0;
-    if (e.code === 'KeyK') input.use = false;
   });
-  window.addEventListener('blur', function () { key.up = key.down = key.left = key.right = 0; input.use = false; });
+  window.addEventListener('blur', function () { key.up = key.down = key.left = key.right = 0; });
   document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
 
   buildMenu(); show('menu');
