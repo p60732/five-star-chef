@@ -361,6 +361,91 @@ t('提示：主按鍵標籤會跟著情況變', () => {
   s = press(s, 'act'); assert.strictEqual(Game.describe(s, 0).act, '切');
 });
 
+const L12 = levels.find((l) => l.id === '1-2');
+// 1-2 位置：洋蔥箱 (2,1)、檯面 (3,1)(5,1)、砧板 (4,1)、盤架 (11,7)、爐 (8,1)(9,1)(10,1)
+t('拿空盤去砧板接切好的湯料（只有湯的關卡也可以）', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 2, 2, 'N'); s = press(s, 'act');
+  s = at(s, 4, 2, 'N'); s = press(s, 'act'); s = press(s, 'act'); s = wait(s, Game.CFG.chopSec + 0.1);
+  s = at(s, 10, 7, 'E'); s = press(s, 'act');                // 拿空盤
+  assert.ok(held(s).kind === 'plate');
+  s = at(s, 4, 2, 'N');
+  assert.strictEqual(Game.describe(s, 0).act, '裝盤');
+  s = press(s, 'act');
+  assert.deepStrictEqual(held(s).contents, ['onion:cut']);
+});
+
+t('托盤：一盤裝 3 份切好的洋蔥，整盤倒進鍋', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 10, 7, 'E'); s = press(s, 'act');                // 拿空盤
+  s = at(s, 5, 2, 'N'); s = press(s, 'act');                 // 盤子放在 (5,1) 檯面
+  for (let i = 0; i < 3; i++) {
+    s = at(s, 2, 2, 'N'); s = press(s, 'act');
+    s = at(s, 4, 2, 'N'); s = press(s, 'act'); s = press(s, 'act'); s = wait(s, Game.CFG.chopSec + 0.1); s = press(s, 'act');
+    s = at(s, 5, 2, 'N'); s.players[0].fx = 0; s = press(s, 'act');               // 裝進檯面上的盤子
+  }
+  s = press(s, 'act');                                       // 拿起盤子
+  assert.deepStrictEqual(held(s).contents, ['onion:cut', 'onion:cut', 'onion:cut']);
+  s = at(s, 8, 2, 'N');
+  assert.strictEqual(Game.describe(s, 0).act, '倒進鍋');
+  s = press(s, 'act');
+  assert.deepStrictEqual(s.tiles['8,1'].pot.contents, ['onion', 'onion', 'onion']);
+  assert.deepStrictEqual(held(s).contents, [], '倒完盤子是空的、還在手上');
+  s = wait(s, Game.CFG.cookSec + 0.1);
+  s = press(s, 'act');                                       // 用同一個盤子盛湯
+  assert.deepStrictEqual(held(s).contents, ['soup:onion']);
+});
+
+t('托盤不能混不同食材、也不能超過 3 份', () => {
+  let s = Game.createGame(L12, 1, 1);
+  s = at(s, 10, 7, 'E'); s = press(s, 'act');
+  const pid = s.players[0].held;
+  s.items[pid].contents = ['onion:cut', 'onion:cut', 'onion:cut'];
+  s.stats.spawned += 3; s.stats.merged += 3;
+  s = at(s, 2, 2, 'N'); s = press(s, 'act'); // 盤子拿著不能拿箱子 → 不變
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'cut', chop: 1, at: { tile: '4,1' } };
+  s.tiles['4,1'].holds = 'x1'; s.stats.spawned += 1;
+  s = at(s, 4, 2, 'N'); s = press(s, 'act');
+  assert.strictEqual(held(s).contents.length, 3);
+  assert.ok(s.tiles['4,1'].holds, '番茄應該還在砧板上');
+});
+
+t('鍋子煮好時拿空盤 → 盛起來', () => {
+  let s = newGame('tomato_soup');
+  s.tiles['7,1'].pot = { contents: ['tomato', 'tomato', 'tomato'], cook: Game.CFG.cookSec + 1, burnt: false };
+  s.stats.spawned = 3; s.stats.merged = 3;
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');
+  s = at(s, 7, 2, 'N');
+  assert.strictEqual(Game.describe(s, 0).act, '盛到盤子');
+  s = press(s, 'act');
+  assert.deepStrictEqual(held(s).contents, ['soup:tomato']);
+});
+
+t('拿著盤子可以接住隊友丟來切好的食材', () => {
+  let s = Game.createGame(L11, 2, 1);
+  s = JSON.parse(JSON.stringify(s)); s.dishes = ['salad'];
+  const p0 = s.players[0], p1 = s.players[1];
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'cut', chop: 1, at: { hand: 0 } };
+  p0.held = 'x1'; s.stats.spawned = 1;
+  s.items['x2'] = { id: 'x2', kind: 'plate', dirty: false, contents: [], at: { hand: 1 } };
+  p1.held = 'x2'; s.tiles['1,7'].clean -= 1;
+  p0.x = 2.5; p0.y = 4.5; p0.fx = 1; p0.fy = 0;
+  p1.x = 5.5; p1.y = 4.5; p1.fx = -1; p1.fy = 0;
+  s = Game.step(s, { 0: { throw: true } }, DT);
+  for (let i = 0; i < 12; i++) { s = Game.step(s, {}, DT); assert.deepStrictEqual(Game.checkInvariants(s), []); }
+  assert.deepStrictEqual(s.items['x2'].contents, ['tomato:cut']);
+  assert.ok(!s.items['x1']);
+});
+
+t('丟進檯面上的盤子', () => {
+  let s = newGame('salad');
+  s = at(s, 1, 6, 'S'); s = press(s, 'act');
+  s = at(s, 3, 2, 'N'); s = press(s, 'act');                 // 盤子放 (3,1)
+  s = chopOne(s, 2, 4);
+  s = at(s, 3, 4, 'N'); s = press(s, 'throw'); s = wait(s, 0.6);
+  assert.deepStrictEqual(s.items[s.tiles['3,1'].holds].contents, ['lettuce:cut']);
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;

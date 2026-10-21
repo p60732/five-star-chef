@@ -118,8 +118,12 @@
   function isIng(it) { return it && it.kind === 'ing'; }
 
   // 這個盤子加上 add 之後，還有沒有可能湊成本關的某道菜
+  // 盤子能不能再放 add：
+  // (1) 湊得成本關某道菜的一部分（沙拉、湯、麵）；或
+  // (2) 當托盤：裝同一種切好的湯料，最多 soupSize 份，之後整盤倒進鍋。
   function plateCanTake(s, plate, add) {
     if (plate.dirty) return false;
+    if (trayOk(plate, add)) return true;
     if (plate.contents.indexOf(add) >= 0) return false;
     var next = plate.contents.concat([add]);
     return s.dishes.some(function (d) {
@@ -128,6 +132,17 @@
     });
   }
   function ingTag(it) { return it.name + ':' + it.state; }
+  function trayOk(plate, add) {
+    var a = add.split(':');
+    if (a[1] !== 'cut' || !SOUP_OK[a[0]]) return false;
+    if (plate.contents.length >= CFG.soupSize) return false;
+    return plate.contents.every(function (c) { return c === add; });
+  }
+  function isTray(plate) {
+    return plate.contents.length > 0 && plate.contents.every(function (c) {
+      var a = c.split(':'); return a[1] === 'cut' && SOUP_OK[a[0]] && c === plate.contents[0];
+    });
+  }
 
   function potAccepts(pot, it) {
     if (!isIng(it) || pot.burnt) return false;
@@ -272,6 +287,13 @@
     if (ch === 'S') {
       var pot = t.pot;
       if (potAccepts(pot, held)) { putInPot(s, pot, held); p.held = null; return 'toPot'; }
+      if (isPlate(held) && isTray(held)) {                // 托盤上的湯料倒進鍋
+        var name = held.contents[0].split(':')[0], poured = 0;
+        while (held.contents.length && potAccepts(pot, { kind: 'ing', name: name, state: 'cut' })) {
+          held.contents.pop(); pot.contents.push(name); poured++;
+        }
+        if (poured) return 'pour';
+      }
       if (isPlate(held) && potReady(pot) && plateCanTake(s, held, potOutput(pot))) {
         held.contents.push(potOutput(pot)); pot.contents = []; pot.cook = 0; return 'fromPot';
       }
@@ -338,9 +360,16 @@
         var cx = Math.floor(a.x), cy = Math.floor(a.y), ch = cellAt(s, cx, cy), ck = key(cx, cy);
         // 隊友接住
         var catcher = s.players.find(function (q) {
-          return q.id !== a.by && !q.held && Math.hypot(q.x - a.x, q.y - a.y) < 0.55;
+          if (q.id === a.by || Math.hypot(q.x - a.x, q.y - a.y) >= 0.6) return false;
+          if (!q.held) return true;
+          var qh = s.items[q.held];
+          return isPlate(qh) && plateCanTake(s, qh, ingTag(it));   // 拿著盤子也能接
         });
-        if (catcher) { it.at = { hand: catcher.id }; catcher.held = it.id; s.events.push({ t: 'catch', pid: catcher.id }); break; }
+        if (catcher) {
+          if (catcher.held) { s.items[catcher.held].contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; }
+          else { it.at = { hand: catcher.id }; catcher.held = it.id; }
+          s.events.push({ t: 'catch', pid: catcher.id }); break;
+        }
         if (ch === '.' || ch === ' ') {
           if (a.dist >= CFG.throwRange) { land(s, it, a.x, a.y, px, py); break; }
           continue;
@@ -350,6 +379,9 @@
         if (ch === 'S' && potAccepts(t.pot, it)) { putInPot(s, t.pot, it); s.events.push({ t: 'potIn' }); break; }
         if (ch === 'T') { removeItem(s, it.id); s.stats.trashed++; break; }
         if (t && 'holds' in t && !t.holds) { t.holds = it.id; it.at = { tile: ck }; break; }
+        if (t && t.holds && isPlate(s.items[t.holds]) && plateCanTake(s, s.items[t.holds], ingTag(it))) {   // 落進檯面上的盤子
+          s.items[t.holds].contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break;
+        }
         land(s, it, px, py, px, py); break;           // 牆或放不下：掉在前一格
       }
     }
@@ -538,6 +570,7 @@
     if (isPlate(it)) {
       if (it.dirty) return '髒盤子';
       if (!it.contents.length) return '空盤子';
+      if (isTray(it)) return '盤子（' + contentLabel(it.contents[0]) + ' ×' + it.contents.length + '）';
       return '盤子（' + it.contents.map(contentLabel).join('＋') + '）';
     }
     return (it.state === 'cut' ? '切好的' : '') + NAMES[it.name];
@@ -575,7 +608,7 @@
     var test = clone(s), r = grab(test, test.players[pid]);
     var GRAB = { pick: '拿起', crate: '拿' + (t && t.item ? NAMES[t.item] : ''), plate: '拿盤子', dirty: '拿髒盤', pickFloor: '撿起來',
       place: '放下', toPlate: '裝盤', toPot: '放進鍋', fromPot: '盛到盤子', serve: '出餐', trash: '丟掉', trashPlate: '倒掉盤裡的菜',
-      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上' };
+      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋' };
     out.grab = r ? GRAB[r] : '';
     if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
     out.use = '';
