@@ -91,7 +91,7 @@
 
   var CH = 0.55; // 檯面高度（壓低，俯視才看得到出入口）
   var WALL_H = 0.42; // 牆高度（比檯面還矮，只當邊界）
-  var ING_SCALE = 1.75, PLATE_SCALE = 1.3; // 食材、盤子放大，遠看也認得出來
+  var ING_SCALE = 2.3, PLATE_SCALE = 1.4; // 食材、盤子放大，遠看也認得出來
 
   function create(container) {
     var renderer = new T.WebGLRenderer({ antialias: true });
@@ -257,7 +257,7 @@
       var a = it.at;
       if (a.hand != null) {
         var p = players[a.hand];
-        return [p.x + p.fx * 0.5, 0.62, p.y + p.fy * 0.5];
+        return [p.x + p.fx * 0.58, 0.6, p.y + p.fy * 0.58];
       }
       if (a.tile) { var xy = a.tile.split(','); return [+xy[0] + 0.5, CH + 0.06, +xy[1] + 0.5]; }
       if (a.floor) return [a.floor[0], 0.02, a.floor[1]];

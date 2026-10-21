@@ -36,6 +36,7 @@
     dashSec: 0.2,          // 衝刺持續秒數（約 2 格）
     dashCooldown: 0.6,     // 衝刺冷卻
     counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
+    itemRadius: 0.32,      // 地上的東西跟牆／檯面保持的距離（不會卡進角落）
     wallH: 0.45,           // 牆高度：中間的隔牆飛得比這高、後面落得到地板就越過去（外牆一定擋）
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
@@ -325,7 +326,7 @@
     }
     var fc = facingCell(p);
     if (walkable(s, fc[0], fc[1])) { held.at = { floor: [fc[0] + 0.5, fc[1] + 0.5] }; p.held = null; return 'drop'; }
-    if (walkable(s, Math.floor(p.x), Math.floor(p.y))) { held.at = { floor: [p.x, p.y] }; p.held = null; return 'drop'; }
+    if (walkable(s, Math.floor(p.x), Math.floor(p.y))) { held.at = { floor: pushOut(s, p.x, p.y) }; p.held = null; return 'drop'; }
     return null;
   }
   function grabAt(s, p, fc) {
@@ -530,7 +531,7 @@
             s.events.push({ t: 'bounce' });
             continue;
           }
-          it.at = { floor: [a.x, a.y], slide: { vx: a.vx * 0.5, vy: a.vy * 0.5 } };   // 開始滑
+          it.at = { floor: pushOut(s, a.x, a.y), slide: { vx: a.vx * 0.5, vy: a.vy * 0.5 } };   // 開始滑（先推離牆角）
           break;
         }
         // 碰到工作台或檯面
@@ -566,11 +567,28 @@
     var f = it.at.floor, v = it.at.slide, sp = Math.hypot(v.vx, v.vy);
     if (sp < 0.05) { delete it.at.slide; return; }
     var nx = f[0] + v.vx * dt, ny = f[1] + v.vy * dt;
-    if (walkable(s, Math.floor(nx), Math.floor(ny))) { f[0] = nx; f[1] = ny; }
+    if (walkable(s, Math.floor(nx), Math.floor(ny))) { var q = pushOut(s, nx, ny); f[0] = q[0]; f[1] = q[1]; }
     else { delete it.at.slide; return; }                       // 碰到檯面或牆就停
     var dec = Math.max(0, sp - CFG.slideFriction * dt) / sp;
     v.vx *= dec; v.vy *= dec;
     if (dec === 0) delete it.at.slide;
+  }
+  // 把地上的東西推離旁邊不能走的格子，至少保持 itemRadius（像角色一樣），角落也推得出來
+  function pushOut(s, x, y) {
+    var r = CFG.itemRadius;
+    for (var k = 0; k < 3; k++) {
+      for (var yy = Math.floor(y - r); yy <= Math.floor(y + r); yy++) {
+        for (var xx = Math.floor(x - r); xx <= Math.floor(x + r); xx++) {
+          if (walkable(s, xx, yy)) continue;
+          var qx = Math.max(xx, Math.min(x, xx + 1)), qy = Math.max(yy, Math.min(y, yy + 1));
+          var dx = x - qx, dy = y - qy, d = Math.hypot(dx, dy);
+          if (d >= r) continue;
+          if (d < 1e-6) { var cx = Math.floor(x) + 0.5, cy = Math.floor(y) + 0.5; dx = cx - x || 0.01; dy = cy - y || 0.01; d = Math.hypot(dx, dy); x += dx / d * r; y += dy / d * r; continue; }
+          x += dx / d * (r - d); y += dy / d * (r - d);
+        }
+      }
+    }
+    return [x, y];
   }
   function land(s, it, x, y, px, py) {
     var cx = Math.floor(x), cy = Math.floor(y);

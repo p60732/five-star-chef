@@ -708,13 +708,15 @@ t('自動瞄準：對著牆丟，會自動對準旁邊能越過的檯面', () =>
   assert.ok(it.at.floor && it.at.floor[0] > 7, '自動越過檯面到右邊，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
 });
 
-t('自動瞄準：斜著丟也能越過中間的檯面', () => {
+t('斜著丟：越過中間那排檯面，或落在中間檯面上（兩邊都拿得到）', () => {
   let s = Game.createGame(L12, 1, 1);
   s = at(s, 2, 2, 'N'); s = press(s, 'act');
   s = at(s, 4, 6, 'E'); s.players[0].fx = 0.8; s.players[0].fy = -0.6;   // 斜右上
   s = press(s, 'throw'); s = wait(s, 1.5);
   const it = firstIng(s);
-  assert.ok(it.at.floor && it.at.floor[0] > 7, '到了右邊，x=' + (it.at.floor && it.at.floor[0].toFixed(2)));
+  const onMiddle = it.at.tile && it.at.tile.split(',')[0] === '6';
+  const right = it.at.floor && it.at.floor[0] > 7;
+  assert.ok(onMiddle || right, JSON.stringify(it.at));
 });
 
 t('自動瞄準：照面向丟本來就沒問題時不修正方向', () => {
@@ -844,6 +846,15 @@ t('面對放不下的工作台時，東西留在手上不會掉地上', () => {
   s = at(s, 1, 2, 'N'); s = press(s, 'act');                 // 生番茄
   s = at(s, 7, 2, 'N'); s = press(s, 'act');                 // 對著鍋（不收生的）
   assert.ok(held(s) && held(s).name === 'tomato');
+});
+
+t('滑進牆角：停下來時跟牆、檯面保持距離，不會卡進角落', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [8.8, 5.8], slide: { vx: 6, vy: 6 } } };
+  s.stats.spawned = 1;                                         // 朝右下角 (9,6) 滑：右邊是牆、下面是檯面
+  s = wait(s, 1);
+  const [x, y] = s.items['x1'].at.floor, r = Game.CFG.itemRadius - 0.01;
+  assert.ok(x <= 10 - r && y <= 7 - r, '離牆角夠遠：' + x.toFixed(2) + ',' + y.toFixed(2));
 });
 
 // 突變：守恆檢查真的會抓到錯

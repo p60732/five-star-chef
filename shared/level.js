@@ -164,7 +164,7 @@
           });
         }
         if (p.min && !TILES[ch].station) warnings.push(at_ + '「多人才出現」只對工作台有意義');
-        if (p.upTo && ch !== '#' && ch !== ' ' && ch !== 'V') warnings.push(at_ + '「人少時變地板」通常放在牆、空地或輸送帶上');
+        if (p.upTo && ch !== '#' && ch !== ' ' && ch !== 'V' && ch !== 'C') warnings.push(at_ + '「人少時變地板」通常放在牆、檯面、空地或輸送帶上');
       });
     });
 

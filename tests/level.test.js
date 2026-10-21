@@ -28,10 +28,10 @@ t('依人數展開：5 人以上才出現的爐子，4 人時變檯面', () => {
   assert.strictEqual(Level.resolve(lv, 5).cells[4][9], 'S');
 });
 
-t('依人數展開：1 人時牆變門，2 人時還是牆', () => {
+t('依人數展開：1 人時檯面變門，2 人時還是檯面', () => {
   const lv = levels[1];
   assert.strictEqual(Level.resolve(lv, 1).cells[8][6], '.');
-  assert.strictEqual(Level.resolve(lv, 2).cells[8][6], '#');
+  assert.strictEqual(Level.resolve(lv, 2).cells[8][6], 'C');
 });
 
 t('只取前 n 個出生點', () => {
