@@ -142,8 +142,12 @@
   // 盤子能不能再放 add：
   // (1) 湊得成本關某道菜的一部分（沙拉、湯、麵）；或
   // (2) 當托盤：裝同一種切好的湯料，最多 soupSize 份，之後整盤倒進鍋。
+  // 一疊乾淨盤也可以放：東西放在最上面那一個盤子上。
+  // 只有處理好的東西能上盤：切好的食材、煮好的湯／麵（生的不行）。
   function plateCanTake(s, plate, add) {
-    if (plate.dirty || pn(plate) > 1) return false;
+    if (plate.dirty) return false;
+    var st = add.split(':')[1];
+    if (add.split(':')[0] !== 'soup' && st !== 'cut' && st !== 'cooked') return false;
     if (trayOk(plate, add)) return true;
     if (plate.contents.indexOf(add) >= 0) return false;
     var next = plate.contents.concat([add]);
@@ -220,7 +224,7 @@
     var ch = cellAt(s, c[0], c[1]), t = s.tiles[key(c[0], c[1])];
     if (ch === 'B' && !p.held && t.holds) { var it = s.items[t.holds]; return isIng(it) && it.state === 'raw' && !!CHOPPABLE[it.name]; }
     if (ch === 'K' && !p.held && t.dirty > 0) return true;
-    if (ch === 'S' && t.pot.burnt) return true;
+    if (ch === 'S' && t.pot.burnt && !p.held) return true;   // 空手才直接清；拿著東西不會把焦鍋清掉
     return false;
   }
   function useTarget(s, p) {
@@ -282,9 +286,11 @@
     if (!held) {
       if (t && t.holds) {
         var it = s.items[t.holds];
-        if (isPlate(it) && !it.dirty && pn(it) > 1) {            // 乾淨的一疊：拿一個
+        if (isPlate(it) && !it.dirty && pn(it) > 1) {            // 乾淨的一疊：拿最上面一個（連同上面的菜）
           it.n = pn(it) - 1;
-          p.held = newItem(s, { kind: 'plate', dirty: false, contents: [], n: 1, at: { hand: p.id } }).id; return 'plate';
+          var top = it.contents; it.contents = [];
+          p.held = newItem(s, { kind: 'plate', dirty: false, contents: top, n: 1, at: { hand: p.id } }).id;
+          return top.length ? 'pick' : 'plate';
         }
         t.holds = null; it.at = { hand: p.id }; p.held = it.id;   // 其他（含髒盤整疊）：整個拿起
         return isPlate(it) && it.dirty && pn(it) > 1 ? 'dirtyStack' : 'pick';
@@ -328,6 +334,10 @@
           held.contents.pop(); pot.contents.push(name); poured++;
         }
         if (poured) return 'pour';
+      }
+      if (isPlate(held) && pot.burnt) {                    // 燒焦的：只有空盤能接（之後拿去垃圾桶倒掉）
+        if (held.dirty || held.contents.length || pn(held) > 1) return null;
+        held.contents.push('burnt'); pot.contents = []; pot.cook = 0; pot.burnt = false; return 'scrapeBurnt';
       }
       if (isPlate(held) && potReady(pot) && plateCanTake(s, held, potOutput(pot))) {
         held.contents.push(potOutput(pot)); pot.contents = []; pot.cook = 0; return 'fromPot';
@@ -644,6 +654,7 @@
     return (it.state === 'cut' ? '切好的' : '') + NAMES[it.name];
   }
   function contentLabel(c) {
+    if (c === 'burnt') return '燒焦的東西';
     var a = c.split(':');
     if (a[0] === 'soup') return NAMES[a[1]] + '湯';
     if (a[0] === 'noodle') return '煮好的麵';
@@ -676,7 +687,7 @@
     var test = clone(s), r = grab(test, test.players[pid]);
     var GRAB = { pick: '拿起', crate: '拿' + (t && t.item ? NAMES[t.item] : ''), plate: '拿盤子', dirty: '拿髒盤', pickFloor: '撿起來',
       place: '放下', toPlate: '裝盤', toPot: '放進鍋', fromPot: '盛到盤子', serve: '出餐', trash: '丟掉', trashPlate: '倒掉盤裡的菜',
-      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走' };
+      toSink: '放進水槽', toRack: '放回盤架', drop: '放在地上', pour: '倒進鍋', stack: '疊上去', dirtyStack: '整疊拿走', scrapeBurnt: '把焦掉的盛起來' };
     out.grab = r ? GRAB[r] : '';
     if (ch === 'O' && isPlate(held) && held.contents.length && !r) out.grab = '沒有這道菜的訂單';
     out.use = '';

@@ -199,7 +199,7 @@
     }
 
     // ── 東西的模型 ──
-    function itemSig(it) { return it.kind === 'plate' ? 'p' + (it.dirty ? 'd' : '') + (it.n || 1) + it.contents.join(',') : it.name + it.state; }
+    function itemSig(it) { return it.kind === 'plate' ? 'p' + (it.dirty ? 'd' : '') + (it.n || 1) + '|' + it.contents.join(',') : it.name + it.state; }
     function makeItem(it) {
       var g = makeItemRaw(it);
       g.scale.setScalar(it.kind === 'plate' ? PLATE_SCALE : ING_SCALE);
@@ -210,13 +210,14 @@
       if (it.kind === 'plate') {
         var cnt = Math.min(it.n || 1, 8);
         for (var k = 0; k < cnt; k++) { var pl = cyl(0.3, 0.05, it.dirty ? COL.dirty : COL.plate, 0.06, 24); pl.position.y = k * 0.07; g.add(pl); }
-        if (cnt > 1) return g;
+        var lift = (cnt - 1) * 0.07;                           // 一疊時，菜放在最上面那個盤子
         it.contents.forEach(function (c, i) {
           var a = c.split(':'), m;
-          if (a[0] === 'soup') { m = cyl(0.22, 0.08, SOUP[a[1]], false, 20); m.position.y = 0.06; }
+          if (c === 'burnt') { m = sph(0.2, COL.burnt, 0.06); m.scale.y = 0.45; m.position.y = 0.07; }
+          else if (a[0] === 'soup') { m = cyl(0.22, 0.08, SOUP[a[1]], false, 20); m.position.y = 0.06; }
           else if (a[0] === 'noodle') { m = cyl(0.2, 0.1, ING.noodle.raw, 0.08, 12); m.position.y = 0.07; }
           else { m = box(0.18, 0.06, 0.12, ING[a[0]].cut, 0.08); m.position.set(-0.08 + i * 0.16, 0.06, 0.04 - i * 0.08); }
-          g.add(m);
+          m.position.y += lift; g.add(m);
         });
         return g;
       }
