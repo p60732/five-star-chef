@@ -24,8 +24,12 @@
     soupSize: 3,           // 湯要幾份食材
     plates: 4,             // 開局盤子數
     returnSec: 6,          // 出餐後幾秒髒盤回來
-    throwSpeed: 9,         // 丟出速度（格/秒）
-    throwRange: 4,         // 最遠幾格
+    throwSpeed: 5.5,       // 丟出的水平速度（格/秒）
+    throwUp: 3.2,          // 往上拋的初速
+    gravity: 14,           // 重力（約 4 格遠落地）
+    launchH: 0.75,         // 出手高度
+    bounce: 0.25,          // 落地反彈係數
+    slideFriction: 9,      // 落地後滑行減速（格/秒²）
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
     patience: { salad: 50, tomato_soup: 70, onion_soup: 70, mushroom_soup: 70, tomato_noodle: 80 },
@@ -376,22 +380,26 @@
     var held = p.held ? s.items[p.held] : null;
     if (!isIng(held)) return null;                      // 只能丟食材（盤子不能丟）
     var len = Math.hypot(p.fx, p.fy) || 1;
-    held.at = { air: { x: p.x, y: p.y, vx: p.fx / len * CFG.throwSpeed, vy: p.fy / len * CFG.throwSpeed, dist: 0, by: p.id } };
+    held.at = { air: { x: p.x + p.fx / len * 0.3, y: p.y + p.fy / len * 0.3, h: CFG.launchH,
+      vx: p.fx / len * CFG.throwSpeed, vy: p.fy / len * CFG.throwSpeed, vh: CFG.throwUp, by: p.id } };
     p.held = null; return 'throw';
   }
 
+  // ── 丟出的物理：拋物線、撞牆反彈、落地彈一下再滑行停住（全部由規則算，伺服器與畫面一致）──
   function flyItems(s, dt) {
     for (var id in s.items) {
       var it = s.items[id], a = it.at.air;
+      if (it.at.slide) { slideItem(s, it, dt); continue; }
       if (!a) continue;
       var steps = 4, sdt = dt / steps;
       for (var k = 0; k < steps && it.at.air; k++) {
         var px = a.x, py = a.y;
-        a.x += a.vx * sdt; a.y += a.vy * sdt; a.dist += CFG.throwSpeed * sdt;
+        a.vh -= CFG.gravity * sdt; a.h += a.vh * sdt;
+        a.x += a.vx * sdt; a.y += a.vy * sdt;
         var cx = Math.floor(a.x), cy = Math.floor(a.y), ch = cellAt(s, cx, cy), ck = key(cx, cy);
-        // 隊友接住
+        // 隊友接住（高度在手的範圍）
         var catcher = s.players.find(function (q) {
-          if (q.id === a.by || Math.hypot(q.x - a.x, q.y - a.y) >= 0.6) return false;
+          if (q.id === a.by || Math.hypot(q.x - a.x, q.y - a.y) >= 0.6 || a.h < 0.15 || a.h > 1.7) return false;
           if (!q.held) return true;
           var qh = s.items[q.held];
           return isPlate(qh) && plateCanTake(s, qh, ingTag(it));   // 拿著盤子也能接
@@ -402,8 +410,16 @@
           s.events.push({ t: 'catch', pid: catcher.id }); break;
         }
         if (ch === '.' || ch === ' ') {
-          if (a.dist >= CFG.throwRange) { land(s, it, a.x, a.y, px, py); break; }
-          continue;
+          if (a.h > 0) continue;
+          if (ch === ' ') { land(s, it, a.x, a.y, px, py); break; }      // 掉進空地：放回最近的地板
+          a.h = 0;
+          if (-a.vh > 1.6) {                                               // 落地彈一下
+            a.vh = -a.vh * CFG.bounce; a.vx *= 0.55; a.vy *= 0.55;
+            s.events.push({ t: 'bounce' });
+            continue;
+          }
+          it.at = { floor: [a.x, a.y], slide: { vx: a.vx * 0.5, vy: a.vy * 0.5 } };   // 開始滑
+          break;
         }
         // 撞到格子
         var t = s.tiles[ck];
@@ -413,9 +429,22 @@
         if (t && t.holds && isPlate(s.items[t.holds]) && plateCanTake(s, s.items[t.holds], ingTag(it))) {   // 落進檯面上的盤子
           s.items[t.holds].contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break;
         }
-        land(s, it, px, py, px, py); break;           // 牆或放不下：掉在前一格
+        // 牆或放不下：彈回來、繼續往下掉
+        a.x = px; a.y = py; a.vx *= -0.3; a.vy *= -0.3;
+        if (a.vh > 0) a.vh = 0;
+        s.events.push({ t: 'bonk' });
       }
     }
+  }
+  function slideItem(s, it, dt) {
+    var f = it.at.floor, v = it.at.slide, sp = Math.hypot(v.vx, v.vy);
+    if (sp < 0.05) { delete it.at.slide; return; }
+    var nx = f[0] + v.vx * dt, ny = f[1] + v.vy * dt;
+    if (walkable(s, Math.floor(nx), Math.floor(ny))) { f[0] = nx; f[1] = ny; }
+    else { delete it.at.slide; return; }                       // 碰到檯面或牆就停
+    var dec = Math.max(0, sp - CFG.slideFriction * dt) / sp;
+    v.vx *= dec; v.vy *= dec;
+    if (dec === 0) delete it.at.slide;
   }
   function land(s, it, x, y, px, py) {
     var cx = Math.floor(x), cy = Math.floor(y);

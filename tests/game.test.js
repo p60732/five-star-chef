@@ -137,8 +137,8 @@ t('拿著東西、身邊的工作台都放不下時，東西留在手上不會�
 t('丟出：撞牆掉在地上，可以撿回來', () => {
   let s = newGame('tomato_soup');
   s = at(s, 1, 2, 'N'); s = press(s, 'grab');
-  s = at(s, 4, 4, 'E'); s = press(s, 'throw');               // 往右飛 4 格，停在地板
-  s = wait(s, 0.6);
+  s = at(s, 3, 4, 'E'); s = press(s, 'throw');               // 往右拋，落地彈一下、滑一點停住
+  s = wait(s, 1.5);
   const it = Object.values(s.items)[0];
   assert.ok(it.at.floor, '應該在地上');
   const fx = Math.floor(it.at.floor[0]), fy = Math.floor(it.at.floor[1]);
@@ -535,6 +535,35 @@ t('晾盤位被佔住時，洗好的盤子留在水槽邊，還是拿得到', ()
   assert.strictEqual(s.tiles['9,3'].clean, 1);
   s = press(s, 'act');
   assert.ok(held(s) && held(s).kind === 'plate');
+});
+
+t('丟出是拋物線：中途有高度、約 4 格落地，落地後會停住', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 3, 4, 'E'); s = press(s, 'throw');
+  const it0 = Object.values(s.items)[0];
+  let maxH = 0, landedX = null;
+  for (let i = 0; i < 40; i++) {
+    s = go(s, {});
+    const it = s.items[it0.id];
+    if (it.at.air) maxH = Math.max(maxH, it.at.air.h);
+    if (it.at.floor && landedX === null) landedX = it.at.floor[0];
+  }
+  assert.ok(maxH > 1.0, '最高點應該超過 1 格高，實際 ' + maxH.toFixed(2));
+  const dist = landedX - 3.5;
+  assert.ok(dist > 3 && dist < 5.5, '落地距離約 4 格，實際 ' + dist.toFixed(2));
+  const it = s.items[it0.id];
+  assert.ok(it.at.floor && !it.at.slide, '最後要停住');
+});
+
+t('丟出撞牆會彈回來掉在地上，不會卡進牆裡', () => {
+  let s = newGame('tomato_soup');
+  s = at(s, 1, 2, 'N'); s = press(s, 'grab');
+  s = at(s, 8, 5, 'E'); s = press(s, 'throw');               // 右邊兩格就是牆
+  s = wait(s, 1.5);
+  const it = Object.values(s.items)[0];
+  assert.ok(it.at.floor, '應該在地上');
+  assert.ok(it.at.floor[0] < 10, '在牆內側，x=' + it.at.floor[0].toFixed(2));
 });
 
 // 突變：守恆檢查真的會抓到錯
