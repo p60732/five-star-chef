@@ -33,6 +33,7 @@ const wait = (s, sec) => go(s, {}, Math.ceil(sec / DT));
 const held = (s) => s.players[0].held && s.items[s.players[0].held];
 const potAt = (s, k) => s.items[s.tiles[k].holds];   // 爐子上的鍋
 const firstIng = (s) => Object.values(s.items).find((i) => i.kind === 'ing');
+const walkableAt = (s, x, y) => s.cells[Math.floor(y)] && s.cells[Math.floor(y)][Math.floor(x)] === '.';
 
 // 1-1 的位置：番茄箱 (1,1)、生菜箱 (2,1)、砧板 (4,1)(5,1)、爐 (7,1)(8,1)、
 // 盤架 (1,7)、回收口 (2,7)、出餐口 (5,7)(6,7)、水槽 (9,3)、垃圾桶 (9,7)
@@ -954,6 +955,35 @@ t('衝刺撞到地上的東西會踢得比較遠', () => {
   };
   const a = run(true), b = run(false);
   assert.ok(a > b + 0.8, '衝刺踢得遠：' + a.toFixed(2) + ' vs ' + b.toFixed(2));
+});
+
+t('推地上的東西往右邊的晾盤架推：也不會被擠進去', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [8.9, 4.5] } };
+  s.stats.spawned = 1;
+  s = at(s, 7, 4, 'E');
+  for (let i = 0; i < 30; i++) {
+    s = go(s, { mx: 1, my: 0 });
+    const f = s.items['x1'].at.floor;
+    assert.ok(f && walkableAt(s, f[0], f[1]), '第 ' + i + ' 步被擠進去：' + f);
+  }
+});
+
+t('推地上的東西到檯面邊：不會被擠進檯面裡', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [5.5, 2.4] } };
+  s.stats.spawned = 1;
+  s = at(s, 5, 3, 'N');                                        // 往上推向 (5,1) 砧板那排
+  for (let i = 0; i < 30; i++) {
+    s = go(s, { mx: 0, my: -1 });                            // 正對著檯面推
+    const f = s.items['x1'].at.floor;
+    assert.ok(f && walkableAt(s, f[0], f[1]), '第 ' + i + ' 步被擠進檯面：' + f);
+  }
+  for (let i = 0; i < 30; i++) {                               // 換成衝刺撞
+    s = at(s, 5, 3, 'N'); s = go(s, { dash: true }); s = wait(s, 0.3);
+    const f = s.items['x1'].at.floor;
+    assert.ok(f && walkableAt(s, f[0], f[1]), '衝刺後被擠進檯面：' + f);
+  }
 });
 
 // 突變：守恆檢查真的會抓到錯

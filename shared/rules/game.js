@@ -627,7 +627,13 @@
       if (d >= reach) continue;
       if (d < 1e-6) { dx = p.fx; dy = p.fy; d = Math.hypot(dx, dy) || 1; }
       var ux = dx / d, uy = dy / d;
-      var q = pushOut(s, p.x + ux * reach, p.y + uy * reach, id);
+      var tx = p.x + ux * reach, ty = p.y + uy * reach;
+      if (!walkable(s, Math.floor(tx), Math.floor(ty))) {
+        if (walkable(s, Math.floor(tx), Math.floor(f[1]))) ty = f[1];          // 沿著檯面邊滑
+        else if (walkable(s, Math.floor(f[0]), Math.floor(ty))) tx = f[0];
+        else { tx = f[0]; ty = f[1]; }
+      }
+      var q = pushOut(s, tx, ty, id);
       f[0] = q[0]; f[1] = q[1];
       var kick = p.dashT > 0 ? CFG.shoveDash : CFG.shoveSpeed;
       it.at.slide = { vx: ux * kick, vy: uy * kick };
@@ -636,6 +642,7 @@
   // 把地上的東西推離旁邊不能走的格子，至少保持 itemRadius（像角色一樣），角落也推得出來
   function pushOut(s, x, y, selfId) {
     var r = CFG.itemRadius;
+    if (!walkable(s, Math.floor(x), Math.floor(y))) { var w = nearestWalkablePoint(s, x, y); x = w[0]; y = w[1]; }
     for (var k = 0; k < 3; k++) {
       for (var oid in s.items) {                         // 跟其他地上的東西保持距離
         if (oid === selfId) continue;
@@ -653,12 +660,25 @@
           var qx = Math.max(xx, Math.min(x, xx + 1)), qy = Math.max(yy, Math.min(y, yy + 1));
           var dx = x - qx, dy = y - qy, d = Math.hypot(dx, dy);
           if (d >= r) continue;
-          if (d < 1e-6) { var cx = Math.floor(x) + 0.5, cy = Math.floor(y) + 0.5; dx = cx - x || 0.01; dy = cy - y || 0.01; d = Math.hypot(dx, dy); x += dx / d * r; y += dy / d * r; continue; }
+          if (d < 1e-6) continue;                          // 已經保證在可走的格子裡，不會發生
           x += dx / d * (r - d); y += dy / d * (r - d);
         }
       }
     }
     return [x, y];
+  }
+  // 點落在檯面／牆裡時，找最近一格地板上最靠近的點（往外推，不往裡推）
+  function nearestWalkablePoint(s, x, y) {
+    var cx = Math.floor(x), cy = Math.floor(y), best = null, bd = 1e9;
+    for (var r = 1; r <= 3 && !best; r++) {
+      for (var yy = cy - r; yy <= cy + r; yy++) for (var xx = cx - r; xx <= cx + r; xx++) {
+        if (!walkable(s, xx, yy)) continue;
+        var qx = Math.max(xx + 0.02, Math.min(x, xx + 0.98)), qy = Math.max(yy + 0.02, Math.min(y, yy + 0.98));
+        var d = Math.hypot(qx - x, qy - y);
+        if (d < bd) { bd = d; best = [qx, qy]; }
+      }
+    }
+    return best || [x, y];
   }
   function land(s, it, x, y, px, py) {
     var cx = Math.floor(x), cy = Math.floor(y);
