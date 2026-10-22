@@ -596,29 +596,12 @@
   function slideItem(s, it, dt) {
     var f = it.at.floor, v = it.at.slide, sp = Math.hypot(v.vx, v.vy);
     if (sp < 0.05) { delete it.at.slide; return; }
-    // 滾到檯面邊：前面那格能收就滾上去（空檯面、盤子、鍋子、垃圾桶），不留在地上
-    var px = f[0] + v.vx / sp * (CFG.itemRadius + 0.08), py = f[1] + v.vy / sp * (CFG.itemRadius + 0.08);
-    var pcx = Math.floor(px), pcy = Math.floor(py);
-    if (!walkable(s, pcx, pcy)) {
-      if (absorbAt(s, it, pcx, pcy)) return;
-      delete it.at.slide; return;                              // 收不了（牆、滿的）就停
-    }
     var nx = f[0] + v.vx * dt, ny = f[1] + v.vy * dt;
     if (walkable(s, Math.floor(nx), Math.floor(ny))) { var q = pushOut(s, nx, ny, it.id); f[0] = q[0]; f[1] = q[1]; }
     else { delete it.at.slide; return; }                       // 碰到檯面或牆就停
     var dec = Math.max(0, sp - CFG.slideFriction * dt) / sp;
     v.vx *= dec; v.vy *= dec;
     if (dec === 0) delete it.at.slide;
-  }
-  // 讓滑行中的東西進到 (cx,cy) 這格：垃圾桶、鍋子、盤子、疊盤、空檯面；成功回傳 true
-  function absorbAt(s, it, cx, cy) {
-    var ck = key(cx, cy), ch = cellAt(s, cx, cy), t = s.tiles[ck], on = t && t.holds ? s.items[t.holds] : null;
-    if (ch === 'T' && isIng(it)) { removeItem(s, it.id); s.stats.trashed++; return true; }
-    if (isPot(on) && potAccepts(on, it)) { putInPot(s, on, it); return true; }
-    if (isIng(it) && isPlate(on) && plateCanTake(s, on, ingTag(it))) { on.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; return true; }
-    if (isPlate(it) && stackable(on, it)) { on.n = pn(on) + pn(it); removeItem(s, it.id); return true; }
-    if (t && 'holds' in t && !t.holds && fitsTile(ch, it)) { t.holds = it.id; it.at = { tile: ck }; return true; }
-    return false;
   }
   // 旁邊（上下左右＋斜角）最近的空檯面，能放食材的才算（晾盤架、砧板以外）
   function freeNeighborHolder(s, cx, cy, x, y, it) {
