@@ -929,6 +929,32 @@ t('加料時鍋子的進度按份量打折', () => {
   assert.ok(Math.abs(potAt(s, '7,1').cook - 3) < 0.1, 'cook=' + potAt(s, '7,1').cook);
 });
 
+t('滑到檯面邊：空的檯面會把東西接上去，不留在地上', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [3.5, 2.6], slide: { vx: 0, vy: -3 } } };
+  s.stats.spawned = 1;                                         // 往上滑向 (3,1) 檯面
+  s = wait(s, 1);
+  assert.strictEqual(s.items['x1'].at.tile, '3,1', JSON.stringify(s.items['x1'].at));
+});
+
+t('滑到有盤子的檯面：切好的會裝進盤子', () => {
+  let s = newGame('salad');
+  s.items['p'] = { id: 'p', kind: 'plate', dirty: false, contents: [], n: 1, at: { tile: '3,1' } };
+  s.tiles['3,1'].holds = 'p'; s.tiles['1,7'].clean -= 1;
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'lettuce', state: 'cut', chop: 1, at: { floor: [3.5, 2.6], slide: { vx: 0, vy: -3 } } };
+  s.stats.spawned = 1;
+  s = wait(s, 1);
+  assert.deepStrictEqual(s.items['p'].contents, ['lettuce:cut']);
+});
+
+t('滑到牆：停在地上', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [5.5, 5.5], slide: { vx: 0, vy: 4 } } };
+  s.stats.spawned = 1;                                         // 往下滑向 (5,7) 出餐口（不收生食材）
+  s = wait(s, 1);
+  assert.ok(s.items['x1'].at.floor && !s.items['x1'].at.slide);
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;
