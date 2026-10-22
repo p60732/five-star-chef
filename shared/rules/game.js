@@ -166,8 +166,10 @@
   // 只有處理好的東西能上盤：切好的食材、煮好的湯／麵（生的不行）。
   function plateCanTake(s, plate, add) {
     if (plate.dirty) return false;
-    var st = add.split(':')[1];
-    if (add.split(':')[0] !== 'soup' && st !== 'cut' && st !== 'cooked') return false;
+    var st = add.split(':')[1], head = add.split(':')[0];
+    if (head !== 'soup' && head !== 'mess' && st !== 'cut' && st !== 'cooked') return false;
+    if ((head === 'soup' || head === 'mess' || st === 'cooked') && !plate.contents.length) return true;   // 鍋裡煮好的：空盤一定能盛
+    if (head === 'mess') return false;
     if (trayOk(plate, add)) return true;
     if (plate.contents.indexOf(add) >= 0) return false;
     var next = plate.contents.concat([add]);
@@ -189,22 +191,27 @@
     });
   }
 
+  // 鍋子：任何食材（生的、切好的、不在食譜裡的）都能下，最多 soupSize 份。
+  // 鍋裡有東西放在爐子上就會煮；加料時進度按份量打折。
+  // 煮出來是什麼看內容：3 份同一種切好的湯料＝那種湯、只有生麵＝煮好的麵，其他都是「做錯的菜」（可以送，但會扣分）
+  // 內容記法：切好的湯料、生麵記名字（tomato、noodle），其他記「名字:狀態」（tomato:raw、lettuce:cut）
   function potAccepts(pot, it) {
     if (!isIng(it) || pot.burnt) return false;
-    var c = pot.contents;
-    if (it.name === 'noodle') return it.state === 'raw' && c.length === 0;
-    if (!SOUP_OK[it.name] || it.state !== 'cut') return false;
-    if (c.length >= CFG.soupSize) return false;
-    return c.every(function (n) { return n === it.name; });
+    return pot.contents.length < CFG.soupSize;
   }
-  function potComplete(pot) {
-    var c = pot.contents;
-    return (c.length === 1 && c[0] === 'noodle') || c.length === CFG.soupSize;
-  }
+  function potTag(it) { return (it.state === 'cut' && SOUP_OK[it.name]) || (it.name === 'noodle' && it.state === 'raw') ? it.name : it.name + ':' + it.state; }
+  function potComplete(pot) { return pot.contents.length > 0; }   // 有東西就會煮
   function potReady(pot) { return potComplete(pot) && !pot.burnt && pot.cook >= CFG.cookSec; }
-  function potOutput(pot) { return pot.contents[0] === 'noodle' ? 'noodle:cooked' : 'soup:' + pot.contents[0]; }
+  function potOutput(pot) {
+    var c = pot.contents;
+    if (c.length === 1 && c[0] === 'noodle') return 'noodle:cooked';
+    if (c.length === CFG.soupSize && SOUP_OK[c[0]] && c.every(function (n) { return n === c[0]; })) return 'soup:' + c[0];
+    return 'mess:' + c.slice().sort().join('+');
+  }
   function putInPot(s, pot, it) {
-    pot.contents.push(it.name); removeItem(s, it.id); s.stats.merged++;
+    var n = pot.contents.length;
+    pot.contents.push(potTag(it)); removeItem(s, it.id); s.stats.merged++;
+    if (n) pot.cook = pot.cook * n / (n + 1);              // 加料：已煮的進度按份量打折
   }
   function emptyPot(pot) { pot.contents = []; pot.cook = 0; pot.burnt = false; }
   function emptySingle(plate) { return !plate.dirty && !plate.contents.length && pn(plate) === 1; }
@@ -212,7 +219,10 @@
   function pourTray(plate, pot) {
     if (!isTray(plate)) return 0;
     var name = plate.contents[0].split(':')[0], poured = 0;
-    while (plate.contents.length && potAccepts(pot, { kind: 'ing', name: name, state: 'cut' })) { plate.contents.pop(); pot.contents.push(name); poured++; }
+    while (plate.contents.length && potAccepts(pot, { kind: 'ing', name: name, state: 'cut' })) {
+      var n0 = pot.contents.length; plate.contents.pop(); pot.contents.push(name); poured++;
+      if (n0) pot.cook = pot.cook * n0 / (n0 + 1);
+    }
     return poured;
   }
   // 兩個東西碰在一起（手上的 held 對著檯面上的 on）會發生什麼；成功就改狀態並回傳代碼
@@ -424,13 +434,21 @@
   // ── 丟出 ──
   function throwItem(s, p) {
     var held = p.held ? s.items[p.held] : null;
-    if (!isIng(held)) return null;                      // 只能丟食材（盤子不能丟）
+    if (!canThrow(held)) return null;                   // 食材、單個空盤可以丟；鍋子、有菜的盤子、一疊盤子不行
     var aim = aimThrow(s, p, held);                     // 自動瞄準：面向附近有能接的目標就對準它
     var ux = aim[0], uy = aim[1];
     if (aim[2]) { p.fx = ux; p.fy = uy; }
     held.at = { air: { x: p.x + ux * 0.3, y: p.y + uy * 0.3, h: CFG.launchH,
       vx: ux * CFG.throwSpeed, vy: uy * CFG.throwSpeed, vh: CFG.throwUp, by: p.id } };
     p.held = null; return 'throw';
+  }
+
+  function canThrow(it) { return isIng(it) || (isPlate(it) && !it.contents.length && pn(it) === 1); }
+  // 這個格子空著時能不能放這個東西（砧板只放食材、晾盤架只放乾淨空盤）
+  function fitsTile(ch, it) {
+    if (ch === 'B') return isIng(it);
+    if (ch === 'D') return isPlate(it) && !it.dirty && !it.contents.length;
+    return true;
   }
 
   // ── 丟出的自動瞄準 ──
@@ -453,7 +471,7 @@
     s.players.forEach(function (q) {
       if (q.id === p.id) return;
       var qh = q.held ? s.items[q.held] : null;
-      if (!qh || (isPlate(qh) && plateCanTake(s, qh, ingTag(it)))) consider(q.x, q.y, 0.6);
+      if (!qh || (isIng(it) && isPlate(qh) && plateCanTake(s, qh, ingTag(it))) || (isPlate(it) && stackable(qh, it))) consider(q.x, q.y, 0.6);
     });
     for (var k in s.tiles) {
       var xy = k.split(','), x = +xy[0], y = +xy[1], ch = cellAt(s, x, y), on = s.tiles[k].holds ? s.items[s.tiles[k].holds] : null;
@@ -520,10 +538,13 @@
           if (q.id === a.by || Math.hypot(q.x - a.x, q.y - a.y) >= 0.6 || a.h < 0.15 || a.h > 1.7) return false;
           if (!q.held) return true;
           var qh = s.items[q.held];
+          if (isPlate(it)) return stackable(qh, it);                // 飛來的空盤：疊到手上的空盤
           return isPlate(qh) && plateCanTake(s, qh, ingTag(it));   // 拿著盤子也能接
         });
         if (catcher) {
-          if (catcher.held) { s.items[catcher.held].contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; }
+          var ch2 = catcher.held ? s.items[catcher.held] : null;
+          if (ch2 && isPlate(it)) { ch2.n = pn(ch2) + pn(it); removeItem(s, it.id); }
+          else if (ch2) { ch2.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; }
           else { it.at = { hand: catcher.id }; catcher.held = it.id; }
           s.events.push({ t: 'catch', pid: catcher.id }); break;
         }
@@ -542,15 +563,16 @@
         // 碰到工作台或檯面
         var t = s.tiles[ck], on = t && t.holds ? s.items[t.holds] : null;
         // 1) 會「收」東西的一定收：垃圾桶、鍋子、盤子
-        if (ch === 'T') { removeItem(s, it.id); s.stats.trashed++; break; }
+        if (ch === 'T' && isIng(it)) { removeItem(s, it.id); s.stats.trashed++; break; }   // 盤子不會被丟進垃圾桶（彈回來）
         if (isPot(on) && potAccepts(on, it)) { putInPot(s, on, it); s.events.push({ t: 'potIn' }); break; }
-        if (isPlate(on) && plateCanTake(s, on, ingTag(it))) { on.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break; }
+        if (isIng(it) && isPlate(on) && plateCanTake(s, on, ingTag(it))) { on.contents.push(ingTag(it)); removeItem(s, it.id); s.stats.merged++; break; }
+        if (isPlate(it) && stackable(on, it)) { on.n = pn(on) + pn(it); removeItem(s, it.id); break; }   // 空盤疊上去
         // 2) 牆擋不住的檯面類都可以越過：後面不是牆、而且飛得比它高 → 繼續飛
         if (a.h > (ch === '#' ? CFG.wallH : tileTop(ch)) && landsBeyond(s, a.x, a.y, a.vx / Math.hypot(a.vx, a.vy), a.vy / Math.hypot(a.vx, a.vy))) continue;
         // 3) 後面是牆（或飛太低）：空的就落在上面，不然彈回來
-        if (t && 'holds' in t && !t.holds && cellAt(s, cx, cy) !== 'D') { t.holds = it.id; it.at = { tile: ck }; break; }
+        if (t && 'holds' in t && !t.holds && fitsTile(ch, it)) { t.holds = it.id; it.at = { tile: ck }; break; }
         // 這格已經有東西：滑到旁邊空的檯面（不會兩個疊在同一格）
-        var side = t && 'holds' in t ? freeNeighborHolder(s, cx, cy, a.x, a.y) : null;   // 只有撞到「有東西的檯面」才換格；撞牆照樣彈回
+        var side = t && 'holds' in t ? freeNeighborHolder(s, cx, cy, a.x, a.y, it) : null;   // 只有撞到「有東西的檯面」才換格；撞牆照樣彈回
         if (side) { s.tiles[side].holds = it.id; it.at = { tile: side }; break; }
         // 牆或放不下：彈回來、繼續往下掉
         a.x = px; a.y = py; a.vx *= -0.3; a.vy *= -0.3;
@@ -582,12 +604,12 @@
     if (dec === 0) delete it.at.slide;
   }
   // 旁邊（上下左右＋斜角）最近的空檯面，能放食材的才算（晾盤架、砧板以外）
-  function freeNeighborHolder(s, cx, cy, x, y) {
+  function freeNeighborHolder(s, cx, cy, x, y, it) {
     var best = null, bd = 9;
     for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
       if (!dx && !dy) continue;
       var nx = cx + dx, ny = cy + dy, k = key(nx, ny), t = s.tiles[k], ch = cellAt(s, nx, ny);
-      if (!t || !('holds' in t) || t.holds || ch === 'D' || ch === 'S') continue;
+      if (!t || !('holds' in t) || t.holds || ch === 'S' || !fitsTile(ch, it)) continue;
       var d = Math.hypot(nx + 0.5 - x, ny + 0.5 - y) + (dx && dy ? 0.3 : 0);
       if (d < bd) { bd = d; best = k; }
     }
@@ -827,14 +849,16 @@
     if (isPot(it)) {
       if (it.burnt) return '燒焦的鍋子';
       if (!it.contents.length) return '空鍋';
-      if (potReady(it)) return '煮好的' + contentLabel(potOutput(it)) + '（鍋）';
-      return '鍋子（' + it.contents.map(function (n) { return NAMES[n]; }).join('、') + (potComplete(it) ? (it.cook > 0 ? '，煮' + Math.floor(it.cook / CFG.cookSec * 100) + '%' : '') : '，還差 ' + (CFG.soupSize - it.contents.length) + ' 份') + '）';
+      if (potReady(it)) return /^mess:/.test(potOutput(it)) ? '鍋裡：' + contentLabel(potOutput(it)) : '煮好的' + contentLabel(potOutput(it)) + '（鍋）';
+      return '鍋子（' + it.contents.map(potItemName).join('、') + (it.cook > 0 ? '，煮' + Math.floor(it.cook / CFG.cookSec * 100) + '%' : '') + '）';
     }
     return (it.state === 'cut' ? '切好的' : '') + NAMES[it.name];
   }
+  function potItemName(t) { var a = t.split(':'); return (a[1] === 'raw' && a[0] !== 'noodle' ? '生的' : '') + NAMES[a[0]]; }
   function contentLabel(c) {
     if (c === 'burnt') return '燒焦的東西';
     var a = c.split(':');
+    if (a[0] === 'mess') return '做錯的菜（' + a.slice(1).join(':').split('+').map(potItemName).join('＋') + '）';
     if (a[0] === 'soup') return NAMES[a[1]] + '湯';
     if (a[0] === 'noodle') return '煮好的麵';
     return '切好的' + NAMES[a[0]];
@@ -844,7 +868,7 @@
     var at = actTarget(s, p), gc = grabTarget(s, p), uc = useTarget(s, p);
     var fc = (at && at.c) || facingCell(p), fk = key(fc[0], fc[1]), ch = cellAt(s, fc[0], fc[1]), t = s.tiles[fk];
     var held = p.held ? s.items[p.held] : null;
-    var out = { holding: itemLabel(held), target: '', grab: '', use: '', act: '', canThrow: isIng(held), cell: at ? at.c : null, busy: !!p.busy };
+    var out = { holding: itemLabel(held), target: '', grab: '', use: '', act: '', canThrow: canThrow(held), cell: at ? at.c : null, busy: !!p.busy };
     if (!at) { var fl = floorItemNear(s, p); if (fl) out.floor = fl.at.floor; }
     var tn = Level.TILES[ch] ? Level.TILES[ch].name : '';
     out.target = tn;
@@ -884,6 +908,6 @@
     CFG: CFG, SIGNATURE: SIGNATURE, NAMES: NAMES,
     createGame: createGame, step: step, describe: describe, facingCell: facingCell,
     checkInvariants: checkInvariants, plateCount: plateCount, itemLabel: itemLabel, contentLabel: contentLabel,
-    potReady: potReady, potComplete: potComplete, isPot: isPot
+    potReady: potReady, potComplete: potComplete, potOutput: potOutput, isPot: isPot
   };
 });

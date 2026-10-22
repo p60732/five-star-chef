@@ -9,7 +9,7 @@
     counter: 0xB98A5E, counterTop: 0xD9B08A, board: 0xF0DDB8, stove: 0x48525F, burner: 0x2B3440,
     pot: 0x9AA7B6, sink: 0xBFD6E8, water: 0x5C95C4, serve: 0xF2B544, trash: 0x6B7684, crate: 0x8F6A43,
     plate: 0xFAF7F0, dirty: 0xA89878, belt: 0x3D6E8F, mover: 0x3F8F7A, window: 0xB9772E, outline: 0x1A1410,
-    skin: 0xF2C9A0, hat: 0xFFFFFF, burnt: 0x2A2420
+    skin: 0xF2C9A0, hat: 0xFFFFFF, burnt: 0x2A2420, mess: 0x8A7356
   };
   var PLAYER = [0xC8432C, 0x3B82C4, 0x3FA36B, 0xD9952B, 0x9B6BD1, 0xE77FA6, 0xE8873A, 0x2E9C9C];
   var ING = {
@@ -219,7 +219,12 @@
         var hdl = box(0.42, 0.06, 0.1, 0x3A3F48, 0.08); hdl.position.set(0.48, 0.24, 0); g.add(hdl);
         var n = it.contents.length;
         if (n) {
-          var col = it.burnt ? COL.burnt : window.Game.potReady(it) ? (it.contents[0] === 'noodle' ? ING.noodle.raw : SOUP[it.contents[0]]) : ING[it.contents[0]].cut;
+          var col;
+          if (it.burnt) col = COL.burnt;
+          else if (window.Game.potReady(it)) {
+            var out = window.Game.potOutput(it);
+            col = out === 'noodle:cooked' ? ING.noodle.raw : out.indexOf('soup:') === 0 ? SOUP[out.slice(5)] : COL.mess;
+          } else { var a0 = it.contents[0].split(':'); col = ING[a0[0]] ? ING[a0[0]][a0[1] === 'raw' ? 'raw' : 'cut'] : COL.mess; }
           var fill = cyl(0.29, 0.04, col, false, 20); fill.position.y = 0.08 + Math.min(n, 3) * 0.07; g.add(fill);
           if (it.burnt) { var smoke = sph(0.16, 0x4A4440, false); smoke.position.y = 0.5; g.add(smoke); }
         }
@@ -232,6 +237,7 @@
         it.contents.forEach(function (c, i) {
           var a = c.split(':'), m;
           if (c === 'burnt') { m = sph(0.2, COL.burnt, 0.06); m.scale.y = 0.45; m.position.y = 0.07; }
+          else if (a[0] === 'mess') { m = sph(0.2, COL.mess, 0.06); m.scale.y = 0.5; m.position.y = 0.08; }
           else if (a[0] === 'soup') { m = cyl(0.22, 0.08, SOUP[a[1]], false, 20); m.position.y = 0.06; }
           else if (a[0] === 'noodle') { m = cyl(0.2, 0.1, ING.noodle.raw, 0.08, 12); m.position.y = 0.07; }
           else { m = box(0.18, 0.06, 0.12, ING[a[0]].cut, 0.08); m.position.set(-0.08 + i * 0.16, 0.06, 0.04 - i * 0.08); }
