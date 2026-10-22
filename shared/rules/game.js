@@ -36,7 +36,9 @@
     dashSec: 0.2,          // 衝刺持續秒數（約 2 格）
     dashCooldown: 0.6,     // 衝刺冷卻
     counterH: 0.6,         // 檯面、工作台高度：後面不是牆時，飛得比這高就越過去
-    itemRadius: 0.32,      // 地上的東西跟牆／檯面保持的距離（不會卡進角落）
+    itemRadius: 0.32,
+    shoveSpeed: 2.2,       // 人走過去把地上的東西擠開的速度
+    shoveDash: 6,          // 衝刺撞到時踢開的速度      // 地上的東西跟牆／檯面保持的距離（不會卡進角落）
     wallH: 0.45,           // 牆高度：中間的隔牆飛得比這高、後面落得到地板就越過去（外牆一定擋）
     tipMax: 20,            // 小費上限
     expirePenalty: 20,     // 訂單逾時扣分
@@ -615,6 +617,22 @@
     }
     return best;
   }
+  // 人走過去會把地上的東西擠開：推到身體外面，順著推的方向滑一下（衝刺推得比較遠）
+  function shoveFloor(s, p) {
+    var reach = CFG.radius + CFG.itemRadius;
+    for (var id in s.items) {
+      var it = s.items[id], f = it.at.floor;
+      if (!f) continue;
+      var dx = f[0] - p.x, dy = f[1] - p.y, d = Math.hypot(dx, dy);
+      if (d >= reach) continue;
+      if (d < 1e-6) { dx = p.fx; dy = p.fy; d = Math.hypot(dx, dy) || 1; }
+      var ux = dx / d, uy = dy / d;
+      var q = pushOut(s, p.x + ux * reach, p.y + uy * reach, id);
+      f[0] = q[0]; f[1] = q[1];
+      var kick = p.dashT > 0 ? CFG.shoveDash : CFG.shoveSpeed;
+      it.at.slide = { vx: ux * kick, vy: uy * kick };
+    }
+  }
   // 把地上的東西推離旁邊不能走的格子，至少保持 itemRadius（像角色一樣），角落也推得出來
   function pushOut(s, x, y, selfId) {
     var r = CFG.itemRadius;
@@ -766,7 +784,7 @@
         p.dashT = Math.max(0, p.dashT - dt);
         moved = true;
       } else moved = move(s, p, inp.mx || 0, inp.my || 0, dt);
-      if (moved) p.busy = null;
+      if (moved) { p.busy = null; shoveFloor(s, p); }
       if (inp.grab) { p.busy = null; var r = grab(s, p); s.events.push({ t: r ? 'grab:' + r : 'nothing', pid: p.id }); }
       if (inp['throw']) { var r2 = throwItem(s, p); if (r2) s.events.push({ t: 'throw', pid: p.id }); }
       if (inp.act) { var ra = act(s, p); s.events.push({ t: ra ? 'act:' + ra : 'nothing', pid: p.id }); }

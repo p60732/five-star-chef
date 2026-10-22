@@ -929,6 +929,33 @@ t('加料時鍋子的進度按份量打折', () => {
   assert.ok(Math.abs(potAt(s, '7,1').cook - 3) < 0.1, 'cook=' + potAt(s, '7,1').cook);
 });
 
+t('人走過去會把地上的東西擠開，不會穿過去', () => {
+  let s = newGame('tomato_soup');
+  s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [5.5, 4.5] } };
+  s.stats.spawned = 1;
+  s = at(s, 3, 4, 'E');
+  for (let i = 0; i < 20; i++) {
+    s = go(s, { mx: 1, my: 0 });
+    const f = s.items['x1'].at.floor, p = s.players[0];
+    assert.ok(Math.hypot(f[0] - p.x, f[1] - p.y) >= Game.CFG.radius + Game.CFG.itemRadius - 0.02, '第 ' + i + ' 步重疊了');
+  }
+  assert.ok(s.items['x1'].at.floor[0] > 6, '番茄被往右推，x=' + s.items['x1'].at.floor[0].toFixed(2));
+});
+
+t('衝刺撞到地上的東西會踢得比較遠', () => {
+  const run = (dash) => {
+    let s = newGame('tomato_soup');
+    s.items['x1'] = { id: 'x1', kind: 'ing', name: 'tomato', state: 'raw', chop: 0, at: { floor: [4.4, 4.5] } };
+    s.stats.spawned = 1;
+    s = at(s, 3, 4, 'E');
+    s = dash ? go(s, { dash: true }, 6) : go(s, { mx: 1, my: 0 }, 12);   // 兩種都前進約 2.2 格
+    s = wait(s, 1.5);
+    return s.items['x1'].at.floor[0];
+  };
+  const a = run(true), b = run(false);
+  assert.ok(a > b + 0.8, '衝刺踢得遠：' + a.toFixed(2) + ' vs ' + b.toFixed(2));
+});
+
 // 突變：守恆檢查真的會抓到錯
 t('突變：盤子憑空多一個 → 守恆檢查報錯', () => {
   let s = newGame('tomato_soup'); s.tiles['1,7'].clean++;
